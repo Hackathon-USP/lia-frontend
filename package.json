@@ -3,7 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "setup": "node scripts/setup-assets.mjs",
+    "predev": "node scripts/setup-assets.mjs",
     "dev": "next dev",
+    "prebuild": "node scripts/setup-assets.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"

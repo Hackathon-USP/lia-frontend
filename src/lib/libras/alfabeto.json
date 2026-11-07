@@ -1,0 +1,37 @@
+{
+  "versao": 1,
+  "instrucoes": [
+    "Letras do alfabeto manual da Libras usadas na datilologia (soletração). Cada letra é gravada na aba Gravar, no conjunto 'Alfabeto'.",
+    "'movimento': true marca as letras que têm movimento. O classificador aprende com as gravações (mede o movimento da ponta dos dedos antes da pausa), então a marcação é só informativa.",
+    "Confirme com intérprete se outras letras têm movimento ou variação regional e anote em 'obs'."
+  ],
+  "letras": [
+    { "letra": "A" },
+    { "letra": "B" },
+    { "letra": "C" },
+    { "letra": "Ç", "movimento": true, "obs": "C com movimento" },
+    { "letra": "D" },
+    { "letra": "E" },
+    { "letra": "F" },
+    { "letra": "G" },
+    { "letra": "H" },
+    { "letra": "I" },
+    { "letra": "J", "movimento": true, "obs": "configuração do I com movimento" },
+    { "letra": "K" },
+    { "letra": "L" },
+    { "letra": "M" },
+    { "letra": "N" },
+    { "letra": "O" },
+    { "letra": "P" },
+    { "letra": "Q" },
+    { "letra": "R" },
+    { "letra": "S" },
+    { "letra": "T" },
+    { "letra": "U" },
+    { "letra": "V" },
+    { "letra": "W" },
+    { "letra": "X" },
+    { "letra": "Y" },
+    { "letra": "Z", "movimento": true, "obs": "desenha um Z" }
+  ]
+}
