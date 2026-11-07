@@ -4,14 +4,14 @@ import { alignGlossToWords, type WordRange } from "@/lib/libras/alignCaption";
 import { env } from "@/config/env";
 import { ROUTES } from "@/routes";
 import { useCamera } from "@/hooks/useCamera";
-import { useChat } from "@/hooks/useChat";
 import { useSignRecognition } from "@/hooks/useSignRecognition";
+import { useTriagem } from "@/hooks/useTriagem";
 import { useVLibrasPlayer, VLIBRAS_PLAYER_SRC } from "@/hooks/useVLibrasPlayer";
 import { MAX_MESSAGE_LENGTH, translateToGloss } from "@/services";
+import type { ModoAcessibilidade } from "@/types";
 import { CameraPip, type PipSide } from "./CameraPip";
 import { SignTrainer } from "./SignTrainer";
-
-const GREETING = "Olá! Eu sou a LIA. Como posso ajudar você hoje?";
+import { TriagemPanel } from "./TriagemPanel";
 
 /* ---------- ícones de traço (decorativos) ---------- */
 function Svg({ children }: { children: ReactNode }) {
@@ -104,13 +104,12 @@ const pillBtn =
 /**
  * Tela de "chamada de vídeo" do totem.
  * Principal: a LIA (avatar do VLibras). Canto superior: a câmera do paciente.
- * Ida:   Libras (câmera) → palavras → frase em português → back (/chat)
- * Volta: resposta do back → glosa VLibras → avatar sinaliza + legenda em português
+ * Ida:   Libras (câmera), toque ou texto → back da LIA (triagem: /atendimentos)
+ * Volta: pergunta/mensagem do back → glosa VLibras → avatar sinaliza + legenda em português
  */
 export function CallScreen() {
   const { videoRef, status: cameraStatus, start: startCamera, stop: stopCamera, isActive: cameraOn } = useCamera();
   const { iframeRef, ready, loadProgress, playing, failed, glossIndex, play } = useVLibrasPlayer(env.liaAvatar);
-  const chat = useChat();
   const overlayRef = useRef<HTMLCanvasElement>(null);
   const [pipSide, setPipSide] = useState<PipSide>("right");
   const [trainerOpen, setTrainerOpen] = useState(false);
@@ -135,13 +134,15 @@ export function CallScreen() {
     }
   }
 
-  /** Um comando do paciente, venha da Libras (câmera) ou do campo de texto. */
-  async function handleCommand(text: string) {
+  // Triagem no back: cada pergunta/mensagem do back a LIA sinaliza.
+  const triagem = useTriagem({ falar: (texto) => void speak(texto), modo: "libras" });
+
+  /** O que o paciente disse, venha da Libras (câmera) ou do campo de texto. */
+  function handleCommand(text: string, canal: ModoAcessibilidade) {
     const command = text.trim();
     if (!command) return;
     setUserCaption(command);
-    const reply = await chat.send(command);
-    if (reply) await speak(reply.content);
+    void triagem.entrada(command, canal);
   }
 
   const signs = useSignRecognition({
@@ -150,7 +151,7 @@ export function CallScreen() {
     enabled: cameraOn, // a leitura continua durante o treino (é ela que grava os exemplos)
     onPhrase: (text) => {
       // Durante o treino, o que for reconhecido não é enviado.
-      if (!trainerOpen) void handleCommand(text);
+      if (!trainerOpen) handleCommand(text, "libras");
     },
   });
 
@@ -159,17 +160,17 @@ export function CallScreen() {
     void startCamera();
   }, [startCamera]);
 
-  // Saudação assim que o avatar termina de carregar.
+  // Começa o atendimento (boas-vindas + consentimento) assim que o avatar carrega.
   useEffect(() => {
     if (!ready || greeted.current) return;
     greeted.current = true;
-    void speak(GREETING);
+    void triagem.comecar();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- só uma vez, quando o player fica pronto
   }, [ready]);
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    void handleCommand(draft);
+    handleCommand(draft, "toque");
     setDraft("");
   }
 
@@ -259,17 +260,53 @@ export function CallScreen() {
               {userCaption}
             </p>
           )}
-          {chat.loading && <p className="rounded-2xl bg-tinta/85 px-4 py-2 text-white">LIA está pensando…</p>}
-          {liaCaption && !chat.loading && (
+          {triagem.carregando && (
+            <p className="rounded-2xl bg-tinta/85 px-4 py-2 text-white">
+              {triagem.lento ? "Conectando ao sistema da unidade… pode levar até 1 minuto." : "LIA está pensando…"}
+            </p>
+          )}
+          {liaCaption && !triagem.carregando && (
             <LiaCaption text={liaCaption} gloss={liaGloss} glossIndex={glossIndex} playing={playing} />
           )}
-          {(chat.error || translateError) && (
+          {triagem.erro && (
+            <p role="alert" className="flex flex-wrap items-center justify-center gap-3 rounded-2xl bg-red-700 px-4 py-2 text-white">
+              {triagem.erro}
+              <button
+                type="button"
+                onClick={triagem.tentarDeNovo}
+                className="rounded-full bg-white px-4 py-1 font-semibold text-red-800 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ambar"
+              >
+                Tentar de novo
+              </button>
+            </p>
+          )}
+          {translateError && !triagem.erro && (
             <p role="alert" className="rounded-2xl bg-red-700 px-4 py-2 text-white">
-              {chat.error ?? "Não foi possível traduzir a resposta para Libras."}
+              Não foi possível traduzir para Libras. Leia a legenda acima.
             </p>
           )}
         </div>
       </main>
+
+      {/* Respostas por toque (as mesmas que podem ser sinalizadas) */}
+      <TriagemPanel
+        fase={triagem.fase}
+        pergunta={triagem.pergunta}
+        finalizacao={triagem.finalizacao}
+        carregando={triagem.carregando}
+        onConsentir={(aceita) => {
+          setUserCaption(aceita ? "Sim, concordo" : "Não");
+          void triagem.consentir(aceita);
+        }}
+        onResponder={(valor, rotulo) => {
+          setUserCaption(rotulo);
+          void triagem.responderPergunta(valor, "toque");
+        }}
+        onRecomecar={() => {
+          setUserCaption("");
+          triagem.recomecar();
+        }}
+      />
 
       {/* Frase sendo montada em Libras */}
       <section aria-label="Sua frase em Libras" className="shrink-0 border-t border-white/10 bg-black/30 px-3 py-3 sm:px-6">
@@ -319,7 +356,7 @@ export function CallScreen() {
               <button type="button" onClick={signs.removeLastWord} className={`${pillBtn} bg-white/15 hover:bg-white/25`}>
                 Apagar última
               </button>
-              <button type="button" onClick={signs.sendPhrase} disabled={chat.loading} className={`${pillBtn} bg-petroleo hover:bg-petroleo-escuro`}>
+              <button type="button" onClick={signs.sendPhrase} disabled={triagem.carregando} className={`${pillBtn} bg-petroleo hover:bg-petroleo-escuro`}>
                 Enviar frase
               </button>
             </div>
@@ -384,7 +421,7 @@ export function CallScreen() {
               enterKeyHint="send"
               className="min-h-12 min-w-0 flex-1 rounded-full border border-white/25 bg-white/10 px-5 text-base text-white placeholder:text-white/70 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ambar sm:min-h-14"
             />
-            <button type="submit" disabled={chat.loading || !draft.trim()} className={`${roundBtn} bg-petroleo hover:bg-petroleo-escuro disabled:opacity-50`}>
+            <button type="submit" disabled={triagem.carregando || !draft.trim()} className={`${roundBtn} bg-petroleo hover:bg-petroleo-escuro disabled:opacity-50`}>
               <IconSend />
               <span className="sr-only">Enviar</span>
             </button>
