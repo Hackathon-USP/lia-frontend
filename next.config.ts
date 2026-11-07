@@ -15,6 +15,18 @@ const nextConfig: NextConfig = {
       },
     },
   },
+  // O player do VLibras (vlibras.gov.br) baixa o estilo da LIA (cores da roupa) deste site.
+  async headers() {
+    return [
+      {
+        source: "/vlibras/:path*",
+        headers: [
+          { key: "Access-Control-Allow-Origin", value: "*" },
+          { key: "Access-Control-Allow-Private-Network", value: "true" },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

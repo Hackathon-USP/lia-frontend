@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { alignGlossToWords, type WordRange } from "@/lib/libras/alignCaption";
 import { env } from "@/config/env";
 import { ROUTES } from "@/routes";
 import { useCamera } from "@/hooks/useCamera";
@@ -59,6 +60,42 @@ const IconEnd = () => (
   </Svg>
 );
 
+/**
+ * Legenda da LIA com destaque na palavra que está sendo sinalizada agora.
+ * O que já foi sinalizado fica normal; o que ainda vem, um pouco mais apagado.
+ */
+function LiaCaption({ text, gloss, glossIndex, playing }: { text: string; gloss: string; glossIndex: number; playing: boolean }) {
+  const words = useMemo(() => text.split(/\s+/).filter(Boolean), [text]);
+  const ranges = useMemo(() => (gloss ? alignGlossToWords(words, gloss.split(/\s+/)) : []), [words, gloss]);
+
+  // Sinal atual; marcações ([PONTO], [INTERROGAÇÃO]) mantêm o destaque anterior.
+  let current: WordRange | null = null;
+  if (playing && glossIndex >= 0) {
+    for (let i = Math.min(glossIndex, ranges.length - 1); i >= 0 && !current; i--) current = ranges[i];
+  }
+
+  return (
+    <p className="max-w-3xl rounded-2xl bg-tinta/90 px-5 py-3 text-center text-lg leading-relaxed text-white shadow-lg sm:text-2xl">
+      <span className="font-bold text-ambar">LIA: </span>
+      {words.map((w, i) => {
+        const isCurrent = current !== null && i >= current.start && i <= current.end;
+        const isFuture = current !== null && i > current.end;
+        return (
+          <span key={i}>
+            <span
+              className={`rounded-md px-0.5 motion-safe:transition-colors motion-safe:duration-150 ${
+                isCurrent ? "bg-ambar font-bold text-tinta" : isFuture ? "text-white/75" : ""
+              }`}
+            >
+              {w}
+            </span>{" "}
+          </span>
+        );
+      })}
+    </p>
+  );
+}
+
 const roundBtn =
   "inline-flex size-12 shrink-0 items-center justify-center rounded-full focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ambar sm:size-14";
 const pillBtn =
@@ -72,12 +109,13 @@ const pillBtn =
  */
 export function CallScreen() {
   const { videoRef, status: cameraStatus, start: startCamera, stop: stopCamera, isActive: cameraOn } = useCamera();
-  const { iframeRef, ready, loadProgress, playing, failed, play } = useVLibrasPlayer(env.liaAvatar);
+  const { iframeRef, ready, loadProgress, playing, failed, glossIndex, play } = useVLibrasPlayer(env.liaAvatar);
   const chat = useChat();
   const overlayRef = useRef<HTMLCanvasElement>(null);
   const [pipSide, setPipSide] = useState<PipSide>("right");
   const [trainerOpen, setTrainerOpen] = useState(false);
   const [liaCaption, setLiaCaption] = useState("");
+  const [liaGloss, setLiaGloss] = useState("");
   const [userCaption, setUserCaption] = useState("");
   const [draft, setDraft] = useState("");
   const [translateError, setTranslateError] = useState(false);
@@ -86,9 +124,12 @@ export function CallScreen() {
   /** Faz a LIA sinalizar (e legendar) um texto em português. */
   async function speak(text: string) {
     setLiaCaption(text);
+    setLiaGloss("");
     setTranslateError(false);
     try {
-      play(await translateToGloss(text));
+      const gloss = await translateToGloss(text);
+      setLiaGloss(gloss);
+      play(gloss);
     } catch {
       setTranslateError(true);
     }
@@ -147,15 +188,18 @@ export function CallScreen() {
     <div className="lia-call fixed inset-0 flex flex-col bg-tinta font-sans text-white">
       <h1 className="sr-only">Chamada com a LIA</h1>
 
-      {/* Palco: a LIA */}
-      <main className="relative min-h-0 flex-1 overflow-hidden">
+      {/* Palco: a LIA, num fundo suave em vez do branco puro do player */}
+      <main className="relative min-h-0 flex-1 overflow-hidden bg-[#E6E1D8] text-tinta">
         <iframe
           ref={iframeRef}
           src={VLIBRAS_PLAYER_SRC}
           title="LIA, avatar que responde em Libras"
           sandbox="allow-scripts allow-same-origin allow-pointer-lock"
+          allow="local-network-access"
           tabIndex={-1}
-          className={`absolute inset-0 h-full w-full border-0 transition-opacity duration-500 motion-reduce:transition-none ${
+          // O player desenha fundo branco; "multiply" troca o branco pela cor do palco
+          // e quase não altera as cores do avatar.
+          className={`absolute inset-0 h-full w-full border-0 mix-blend-multiply transition-opacity duration-500 motion-reduce:transition-none ${
             ready ? "opacity-100" : "opacity-0"
           }`}
         />
@@ -175,9 +219,9 @@ export function CallScreen() {
                   aria-valuemin={0}
                   aria-valuemax={100}
                   aria-valuenow={Math.round(loadProgress * 100)}
-                  className="h-2 w-56 overflow-hidden rounded-full bg-white/15"
+                  className="h-2 w-56 overflow-hidden rounded-full bg-tinta/15"
                 >
-                  <div className="h-full bg-ambar" style={{ width: `${Math.round(loadProgress * 100)}%` }} />
+                  <div className="h-full bg-petroleo" style={{ width: `${Math.round(loadProgress * 100)}%` }} />
                 </div>
               </>
             )}
@@ -186,7 +230,7 @@ export function CallScreen() {
 
         {/* Identificação da chamada, no canto oposto ao da câmera */}
         <div
-          className={`absolute top-4 z-10 flex items-center gap-2 rounded-full bg-black/55 px-4 py-2 sm:top-6 ${
+          className={`absolute top-4 z-10 flex items-center gap-2 rounded-full bg-tinta/85 px-4 py-2 text-white sm:top-6 ${
             pipSide === "right" ? "left-4 sm:left-6" : "right-4 sm:right-6"
           }`}
         >
@@ -200,17 +244,14 @@ export function CallScreen() {
         {/* Legendas */}
         <div className="absolute inset-x-0 bottom-4 z-10 flex flex-col items-center gap-2 px-4" aria-live="polite">
           {userCaption && (
-            <p className="max-w-2xl rounded-2xl bg-black/55 px-4 py-2 text-center text-white/90">
+            <p className="max-w-2xl rounded-2xl bg-tinta/75 px-4 py-2 text-center text-white">
               <span className="font-bold">Você: </span>
               {userCaption}
             </p>
           )}
-          {chat.loading && <p className="rounded-2xl bg-black/70 px-4 py-2">LIA está pensando…</p>}
+          {chat.loading && <p className="rounded-2xl bg-tinta/85 px-4 py-2 text-white">LIA está pensando…</p>}
           {liaCaption && !chat.loading && (
-            <p className="max-w-2xl rounded-2xl bg-black/75 px-5 py-3 text-center text-lg sm:text-xl">
-              <span className="font-bold text-ambar">LIA: </span>
-              {liaCaption}
-            </p>
+            <LiaCaption text={liaCaption} gloss={liaGloss} glossIndex={glossIndex} playing={playing} />
           )}
           {(chat.error || translateError) && (
             <p role="alert" className="rounded-2xl bg-red-700 px-4 py-2 text-white">

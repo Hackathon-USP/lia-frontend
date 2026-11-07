@@ -13,6 +13,11 @@ export const env = {
   liaAvatar: (["hosana", "icaro", "guga"].includes(process.env.NEXT_PUBLIC_LIA_AVATAR ?? "")
     ? process.env.NEXT_PUBLIC_LIA_AVATAR
     : "hosana") as "hosana" | "icaro" | "guga",
+  /**
+   * JSON com as cores da roupa da LIA (camisa, calca, cabelo, corpo, iris, olhos, sombrancelhas).
+   * Caminho relativo = arquivo em /public deste site.
+   */
+  liaAvatarStyleUrl: process.env.NEXT_PUBLIC_LIA_AVATAR_STYLE_URL ?? "/vlibras/lia-avatar.json",
   /** Versão do player Unity do VLibras (a mesma que o plugin oficial carrega) */
   vlibrasPlayerVersion: "7.12.2",
   /** API pública do VLibras: português → glosa em Libras */
