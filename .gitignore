@@ -40,3 +40,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Gerados por `npm run setup` (WASM e modelos do MediaPipe, servidos pelo próprio app)
+/public/mediapipe/
+/public/models/
+
+# Gravações de sinais (pontos de pessoas reais, LGPD) e bases públicas
+*.dataset.json
+*.dataset.json.gz

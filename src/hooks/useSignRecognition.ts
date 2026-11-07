@@ -1,29 +1,72 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
-import type { HandLandmarker, HandLandmarkerResult } from "@mediapipe/tasks-vision";
-import { KnnClassifier, type Prediction, type SignDataset } from "@/lib/libras/classifier";
-import { extractFeatures } from "@/lib/libras/features";
-import { loadDataset, MAX_SAMPLES_PER_SIGN, parseDataset, saveDataset, serializeDataset } from "@/lib/libras/store";
+import alphabetFile from "@/lib/libras/alfabeto.json";
+import vocabFile from "@/lib/libras/vocabulario.json";
+import {
+  createLiaVision,
+  glossesOf,
+  HAND_CONNECTIONS,
+  isLetterGloss,
+  letterCandidateFromSample,
+  normalizeGloss,
+  parseAlphabet,
+  parseVocabulary,
+  type FrameEvent,
+  type HoldState,
+  type ImportReport,
+  type LiaVision,
+  type RecognitionMode,
+} from "@/lib/libras";
 
-/* MediaPipe Hand Landmarker: acha 21 pontos de cada mão em cada quadro (roda no navegador). */
-const WASM_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.2.2/wasm";
-const MODEL_URL =
-  "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task";
+/*
+ * Libras → português, com o motor do lia-vision (src/lib/libras):
+ * 1. MediaPipe acha as mãos (todo quadro) e o tronco (a cada 2 quadros) — posições relativas aos ombros.
+ * 2. A segmentação acha onde cada sinal começa e termina; enquanto ele acontece, sai um palpite ao vivo.
+ * 3. Quando o sinal termina, um classificador DTW (k vizinhos, num Web Worker) compara o movimento
+ *    inteiro com os exemplos gravados; acima do limiar, vira palavra.
+ * 4. No modo datilologia, cada letra conta quando a mão fica parada; "Confirmar palavra" junta as letras.
+ * 5. Mãos abaixadas por 2,5 s fecham a frase, que vai para onPhrase (que manda para o back).
+ */
 
-/* Ajustes da leitura */
-const VOTE_WINDOW = 12; // quadros considerados
-const VOTES_TO_ACCEPT = 9; // quantos precisam concordar para virar palavra (~0,4 s parado no sinal)
-const MIN_CONFIDENCE = 0.6;
-const HANDS_DOWN_RESET_MS = 700; // baixar as mãos permite repetir a mesma palavra
 const AUTO_SEND_MS = 2500; // mãos abaixadas por esse tempo = frase terminada
 const COUNTDOWN_S = 3;
 const CAPTURE_MS = 2500;
+const LETTER_CAPTURE_MS = 2000;
+const MISS_SHOW_MS = 2000;
+const SIGNS_KEY = "lia:sinais:lista:v2";
+const SIGNER_KEY = "lia:sinalizante";
+const OLD_DATA_KEY = "lia:sinais:v1"; // formato da versão anterior (vetores prontos, sem o tronco)
+
+const ALPHABET = parseAlphabet(alphabetFile);
+const DEFAULT_SIGNS = glossesOf(parseVocabulary(vocabFile));
 
 export type SignRecognitionStatus = "off" | "loading" | "ready" | "error";
+export type { RecognitionMode };
 
 export interface RecordingState {
   label: string;
   phase: "countdown" | "capturing";
   secondsLeft: number;
+}
+
+export interface Prediction {
+  label: string;
+  /** 0..1 */
+  confidence: number;
+}
+
+export interface VocabItem {
+  label: string;
+  /** Gravações deste sinal neste navegador. */
+  count: number;
+  /** Letra com movimento (J, Z, Ç). */
+  movimento?: boolean;
+}
+
+export interface RecordResult {
+  frames: number;
+  handsRatio: number;
+  /** Problema na gravação (ela foi salva mesmo assim). */
+  warning?: string;
 }
 
 export interface SignRecognitionOptions {
@@ -33,244 +76,345 @@ export interface SignRecognitionOptions {
   overlayRef: RefObject<HTMLCanvasElement | null>;
   /** Só reconhece com a câmera ligada */
   enabled: boolean;
-  /** Chamado com a frase em português quando a pessoa termina de sinalizar */
+  /** Chamado com a frase quando a pessoa termina de sinalizar */
   onPhrase: (text: string) => void;
 }
 
-type Connection = { start: number; end: number };
+let liaPromise: Promise<LiaVision> | null = null;
 
-let landmarkerPromise: Promise<{ landmarker: HandLandmarker; connections: Connection[] }> | null = null;
-
-/** Carrega o MediaPipe uma única vez por página (GPU, com CPU de reserva). */
-function loadLandmarker() {
-  landmarkerPromise ??= (async () => {
-    const vision = await import("@mediapipe/tasks-vision");
-    const fileset = await vision.FilesetResolver.forVisionTasks(WASM_URL);
-    const make = (delegate: "GPU" | "CPU") =>
-      vision.HandLandmarker.createFromOptions(fileset, {
-        baseOptions: { modelAssetPath: MODEL_URL, delegate },
-        runningMode: "VIDEO",
-        numHands: 2,
-        minHandDetectionConfidence: 0.6,
-        minHandPresenceConfidence: 0.6,
-        minTrackingConfidence: 0.5,
-      });
-    const landmarker = await make("GPU").catch(() => make("CPU"));
-    return { landmarker, connections: vision.HandLandmarker.HAND_CONNECTIONS };
-  })().catch((err) => {
-    landmarkerPromise = null; // permite tentar de novo
+/** Carrega o motor (MediaPipe + classificador) uma única vez por página. */
+function loadLia() {
+  liaPromise ??= createLiaVision({
+    // Sem filtro de vocabulário: valem todos os sinais gravados (inclusive os que o totem aprende).
+    alphabet: ALPHABET.map((a) => a.letra),
+    segmentation: { stillMs: 300 },
+    poseEveryNFrames: 2,
+    liveGuessMs: 150,
+    assets: {
+      wasmPath: `${window.location.origin}/mediapipe/wasm`,
+      handModelPath: `${window.location.origin}/models/hand_landmarker.task`,
+      poseModelPath: `${window.location.origin}/models/pose_landmarker_lite.task`,
+    },
+  }).catch((err) => {
+    liaPromise = null; // permite tentar de novo
     throw err;
   });
-  return landmarkerPromise;
+  return liaPromise;
 }
 
-function drawHands(canvas: HTMLCanvasElement | null, video: HTMLVideoElement, result: HandLandmarkerResult, connections: Connection[]) {
+function readJSON<T>(key: string, fallback: T): T {
+  try {
+    const raw = window.localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeJSON(key: string, value: unknown) {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    /* armazenamento cheio ou bloqueado */
+  }
+}
+
+/** Apelido deste aparelho nas gravações (serve para a avaliação por pessoa na bancada). */
+function loadSigner(): string {
+  const saved = readJSON<string | null>(SIGNER_KEY, null);
+  if (saved) return saved;
+  const id = `totem-${Math.random().toString(36).slice(2, 6)}`;
+  writeJSON(SIGNER_KEY, id);
+  return id;
+}
+
+function drawHands(canvas: HTMLCanvasElement | null, e: FrameEvent) {
   if (!canvas) return;
-  if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+  const { width, height } = e.raw;
+  if (canvas.width !== width || canvas.height !== height) {
+    canvas.width = width;
+    canvas.height = height;
   }
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  const lw = Math.max(2, canvas.width / 220);
-  for (const lm of result.landmarks) {
+  ctx.clearRect(0, 0, width, height);
+  const lw = Math.max(2, width / 220);
+  for (const hand of [e.raw.hands.right, e.raw.hands.left]) {
+    if (!hand) continue;
+    const pts = hand.landmarks.map((p) => ({ x: p.x * width, y: p.y * height }));
     ctx.strokeStyle = "#F2B33D";
     ctx.lineWidth = lw;
     ctx.beginPath();
-    for (const { start, end } of connections) {
-      ctx.moveTo(lm[start].x * canvas.width, lm[start].y * canvas.height);
-      ctx.lineTo(lm[end].x * canvas.width, lm[end].y * canvas.height);
+    for (const [a, b] of HAND_CONNECTIONS) {
+      ctx.moveTo(pts[a].x, pts[a].y);
+      ctx.lineTo(pts[b].x, pts[b].y);
     }
     ctx.stroke();
     ctx.fillStyle = "#ffffff";
-    for (const p of lm) {
+    for (const p of pts) {
       ctx.beginPath();
-      ctx.arc(p.x * canvas.width, p.y * canvas.height, lw * 1.4, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, lw * 1.4, 0, Math.PI * 2);
       ctx.fill();
     }
   }
 }
 
-/**
- * Libras → português.
- * 1. MediaPipe acha as mãos em cada quadro da câmera.
- * 2. Um classificador kNN compara com os sinais ensinados no próprio totem.
- * 3. Sinal mantido por ~0,4 s vira palavra; mãos abaixadas por 2,5 s fecham a frase.
- * 4. A frase vai para onPhrase (que manda para o back).
- */
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Mesmo limiar que o motor usa para aceitar um sinal (confidenceThreshold padrão). */
+const LIVE_MIN_CONFIDENCE = 0.6;
+
 export function useSignRecognition({ videoRef, overlayRef, enabled, onPhrase }: SignRecognitionOptions) {
-  const [dataset, setDataset] = useState<SignDataset>(loadDataset);
-  const classifier = useMemo(() => new KnnClassifier(dataset), [dataset]);
-  const [modelReady, setModelReady] = useState(false);
-  const [modelFailed, setModelFailed] = useState(false);
+  const [lia, setLia] = useState<LiaVision | null>(null);
+  const [failed, setFailed] = useState(false);
   const [handsVisible, setHandsVisible] = useState(false);
   const [guess, setGuess] = useState<Prediction | null>(null);
   const [words, setWords] = useState<string[]>([]);
+  const [spelling, setSpelling] = useState<string[]>([]);
+  const [spellState, setSpellState] = useState<HoldState | null>(null);
+  const [mode, setModeState] = useState<RecognitionMode>("sinais");
+  const [missed, setMissed] = useState(false);
   const [recording, setRecording] = useState<RecordingState | null>(null);
+  const [counts, setCounts] = useState<Record<string, number>>({});
+  const [signList, setSignList] = useState<string[]>(() => readJSON(SIGNS_KEY, DEFAULT_SIGNS));
+  const [hasTrainedSigns, setHasTrainedSigns] = useState(false);
+  const [hadOldData] = useState(() => readJSON<unknown>(OLD_DATA_KEY, null) !== null);
+  const [signer] = useState(loadSigner);
 
-  // Valores lidos dentro do loop de vídeo (fora do render).
-  const classifierRef = useRef(classifier);
   const onPhraseRef = useRef(onPhrase);
-  const wordsRef = useRef<string[]>([]);
-  const captureRef = useRef<number[][] | null>(null);
+  const recordingRef = useRef(false);
+  const missTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  useEffect(() => {
-    classifierRef.current = classifier;
-  }, [classifier]);
   useEffect(() => {
     onPhraseRef.current = onPhrase;
   });
-  useEffect(() => saveDataset(dataset), [dataset]);
+  useEffect(() => writeJSON(SIGNS_KEY, signList), [signList]);
 
-  const setPhrase = useCallback((next: string[]) => {
-    wordsRef.current = next;
-    setWords(next);
+  /** Recarrega contagens e modelos a partir das gravações (IndexedDB). */
+  const refreshModel = useCallback(async (l: LiaVision) => {
+    const stats = await l.dataset.stats();
+    const byGloss = Object.fromEntries(Object.entries(stats.byGloss).map(([g, b]) => [g, b.total]));
+    setCounts(byGloss);
+    // Sinais que chegaram por importação entram na lista.
+    setSignList((list) => {
+      const extra = Object.keys(byGloss).filter((g) => !isLetterGloss(g) && !list.includes(g));
+      return extra.length ? [...list, ...extra] : list;
+    });
+    await l.loadModel();
+    setHasTrainedSigns((l.model?.templates ?? 0) > 0 || !!l.letterModel);
   }, []);
 
-  const sendPhrase = useCallback(() => {
-    const text = wordsRef.current.join(" ").trim();
-    setPhrase([]);
-    if (text) onPhraseRef.current(text);
-  }, [setPhrase]);
-
-  // Loop de leitura das mãos enquanto a câmera estiver ligada.
+  // 1. Carrega o motor quando a câmera liga pela primeira vez (e os modelos das gravações salvas).
   useEffect(() => {
-    if (!enabled) return;
-    const canvas = overlayRef.current;
+    if (!enabled || lia) return;
     let cancelled = false;
-    let raf = 0;
-    let lastVideoTime = -1;
-    let frameNo = 0;
-    let lastHandsAt = performance.now();
-    let hadHands = false;
-    let votes: (string | null)[] = [];
-    let lastEmitted: string | null = null;
-    let shownGuess: string | null = null;
-
-    function handle(result: HandLandmarkerResult) {
-      const now = performance.now();
-      const features = extractFeatures(result);
-      const hasHands = features !== null;
-      if (hasHands !== hadHands) {
-        hadHands = hasHands;
-        setHandsVisible(hasHands);
-      }
-
-      // Gravando exemplos: guarda 1 a cada 2 quadros e não reconhece.
-      if (captureRef.current) {
-        if (features && frameNo % 2 === 0) captureRef.current.push(features);
-        return;
-      }
-
-      if (hasHands) lastHandsAt = now;
-      else if (now - lastHandsAt > HANDS_DOWN_RESET_MS) lastEmitted = null;
-
-      const prediction = features ? classifierRef.current.predict(features) : null;
-      const label = prediction && prediction.confidence >= MIN_CONFIDENCE ? prediction.label : null;
-      if (label !== shownGuess) {
-        shownGuess = label;
-        setGuess(label ? prediction : null);
-      }
-
-      votes.push(label);
-      if (votes.length > VOTE_WINDOW) votes.shift();
-      const tally = new Map<string, number>();
-      for (const v of votes) if (v) tally.set(v, (tally.get(v) ?? 0) + 1);
-      for (const [word, n] of tally) {
-        if (n >= VOTES_TO_ACCEPT && word !== lastEmitted) {
-          lastEmitted = word;
-          votes = [];
-          setPhrase([...wordsRef.current, word]);
-          break;
-        }
-      }
-
-      if (!hasHands && wordsRef.current.length && now - lastHandsAt > AUTO_SEND_MS) sendPhrase();
-    }
-
-    loadLandmarker()
-      .then(({ landmarker, connections }) => {
+    loadLia()
+      .then(async (l) => {
         if (cancelled) return;
-        setModelReady(true);
-        const frame = () => {
-          const video = videoRef.current;
-          if (video && video.readyState >= 2 && video.currentTime !== lastVideoTime) {
-            lastVideoTime = video.currentTime;
-            frameNo++;
-            const result = landmarker.detectForVideo(video, performance.now());
-            drawHands(canvas, video, result, connections);
-            handle(result);
-          }
-          raf = requestAnimationFrame(frame);
-        };
-        raf = requestAnimationFrame(frame);
+        setLia(l);
+        await refreshModel(l).catch((err) => console.warn("[lia] não consegui ler as gravações salvas", err));
       })
-      .catch(() => {
-        if (!cancelled) setModelFailed(true);
-      });
-
+      .catch(() => !cancelled && setFailed(true));
     return () => {
       cancelled = true;
-      cancelAnimationFrame(raf);
+    };
+  }, [enabled, lia, refreshModel]);
+
+  const sendPhrase = useCallback(() => {
+    if (!lia) return;
+    if (lia.getSpelling().length) lia.commitSpelling(); // palavra soletrada em andamento entra na frase
+    const text = lia.getGlosses().join(" ").trim();
+    lia.clearGlosses();
+    if (text) onPhraseRef.current(text);
+  }, [lia]);
+  const sendRef = useRef(sendPhrase);
+  useEffect(() => {
+    sendRef.current = sendPhrase;
+  });
+
+  // 2. Eventos do motor → estado da tela.
+  useEffect(() => {
+    if (!lia) return;
+    let lastHandsAt = performance.now();
+    let lastSpell: HoldState | null = null;
+    const flashMiss = () => {
+      setMissed(true);
+      clearTimeout(missTimer.current);
+      missTimer.current = setTimeout(() => setMissed(false), MISS_SHOW_MS);
+    };
+    const offs = [
+      lia.on("frame", (e) => {
+        drawHands(overlayRef.current, e);
+        if (e.spelling?.state !== lastSpell) {
+          lastSpell = e.spelling?.state ?? null;
+          setSpellState(lastSpell);
+        }
+        const now = performance.now();
+        if (e.raw.hands.right || e.raw.hands.left) lastHandsAt = now;
+        else if (now - lastHandsAt > AUTO_SEND_MS && !recordingRef.current && (lia.getGlosses().length || lia.getSpelling().length)) {
+          lastHandsAt = now;
+          sendRef.current();
+        }
+      }),
+      lia.on("handsDetected", (e) => setHandsVisible(e.count > 0)),
+      // Palpite ao vivo: só mostra quando já passaria no limiar do reconhecimento final.
+      lia.on("signProgress", (e) => setGuess(e.confidence >= LIVE_MIN_CONFIDENCE ? { label: e.gloss, confidence: e.confidence } : null)),
+      lia.on("signRecognized", () => setGuess(null)),
+      lia.on("signDiscarded", () => setGuess(null)),
+      lia.on("lowConfidence", (e) => {
+        setGuess(null);
+        if (e.reason === "confianca-baixa" || e.reason === "poucas-maos") flashMiss();
+      }),
+      lia.on("letterLowConfidence", (e) => e.reason === "confianca-baixa" && flashMiss()),
+      lia.on("glossesChanged", (e) => setWords(e.glosses)),
+      lia.on("spellingChanged", (e) => setSpelling(e.letters)),
+    ];
+    return () => {
+      offs.forEach((off) => off());
+      clearTimeout(missTimer.current);
+    };
+  }, [lia, overlayRef]);
+
+  // 3. Processa o vídeo enquanto a câmera estiver ligada (usa o stream que o useCamera já abriu).
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!lia || !enabled || !video) return;
+    let stopped = false;
+    lia.start(video).catch(() => !stopped && setFailed(true));
+    const canvas = overlayRef.current;
+    return () => {
+      stopped = true;
+      lia.stop();
       canvas?.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
     };
-  }, [enabled, videoRef, overlayRef, sendPhrase, setPhrase]);
+  }, [lia, enabled, videoRef, overlayRef]);
+
+  /* ---------- sinais / datilologia ---------- */
+
+  const setMode = useCallback(
+    (m: RecognitionMode) => {
+      lia?.setMode(m);
+      setModeState(m);
+      setGuess(null);
+    },
+    [lia],
+  );
 
   /* ---------- treino ---------- */
 
-  const record = useCallback(async (label: string): Promise<number> => {
-    for (let s = COUNTDOWN_S; s > 0; s--) {
-      setRecording({ label, phase: "countdown", secondsLeft: s });
-      await new Promise((r) => setTimeout(r, 1000));
-    }
-    captureRef.current = [];
-    setRecording({ label, phase: "capturing", secondsLeft: Math.ceil(CAPTURE_MS / 1000) });
-    await new Promise((r) => setTimeout(r, CAPTURE_MS));
-    const samples = captureRef.current ?? [];
-    captureRef.current = null;
-    setRecording(null);
-    if (samples.length) {
-      setDataset((d) => ({ ...d, [label]: [...(d[label] ?? []), ...samples].slice(-MAX_SAMPLES_PER_SIGN) }));
-    }
-    return samples.length;
-  }, []);
-
-  const addSign = useCallback((label: string) => {
-    const clean = label.trim().toLowerCase();
-    if (clean) setDataset((d) => (d[clean] ? d : { ...d, [clean]: [] }));
-  }, []);
-
-  const deleteSign = useCallback((label: string) => {
-    setDataset((d) => {
-      const next = { ...d };
-      delete next[label];
-      return next;
-    });
-  }, []);
-
-  const clearSign = useCallback((label: string) => setDataset((d) => ({ ...d, [label]: [] })), []);
-
-  const exportData = useCallback(() => serializeDataset(dataset), [dataset]);
-  const importData = useCallback((json: string) => setDataset(parseDataset(json)), []);
-
-  const vocab = useMemo(
-    () => Object.entries(dataset).map(([label, samples]) => ({ label, count: samples.length })),
-    [dataset],
+  const removeSamples = useCallback(
+    async (gloss: string) => {
+      if (!lia) return;
+      for (const m of await lia.dataset.list({ gloss })) await lia.dataset.remove(m.id);
+    },
+    [lia],
   );
 
-  const status: SignRecognitionStatus = modelFailed ? "error" : !enabled ? "off" : modelReady ? "ready" : "loading";
+  const record = useCallback(
+    async (label: string): Promise<RecordResult> => {
+      if (!lia) return { frames: 0, handsRatio: 0, warning: "A leitura das mãos ainda não carregou." };
+      const gloss = normalizeGloss(label);
+      const letter = isLetterGloss(gloss);
+      recordingRef.current = true;
+      try {
+        for (let s = COUNTDOWN_S; s > 0; s--) {
+          setRecording({ label: gloss, phase: "countdown", secondsLeft: s });
+          await sleep(1000);
+        }
+        const ms = letter ? LETTER_CAPTURE_MS : CAPTURE_MS;
+        setRecording({ label: gloss, phase: "capturing", secondsLeft: Math.ceil(ms / 1000) });
+        lia.setRecognizing(false); // não reconhece o que está sendo gravado
+        const sample = await lia.dataset.recordSample(gloss, { signer, durationMs: ms, origin: "totem" });
+        let warning: string | undefined;
+        if (sample.quality.handsRatio < 0.5) warning = "Vi pouco as suas mãos. Grave de novo com as mãos bem visíveis.";
+        else if (letter && !letterCandidateFromSample(sample)) warning = "A mão não ficou parada no fim. Grave de novo segurando a letra até acabar.";
+        await refreshModel(lia);
+        return { frames: sample.frames.length, handsRatio: sample.quality.handsRatio, warning };
+      } catch (err) {
+        return { frames: 0, handsRatio: 0, warning: `Não foi possível gravar: ${(err as Error)?.message ?? err}` };
+      } finally {
+        lia.setRecognizing(true);
+        recordingRef.current = false;
+        setRecording(null);
+      }
+    },
+    [lia, signer, refreshModel],
+  );
+
+  const addSign = useCallback((label: string) => {
+    const gloss = normalizeGloss(label);
+    if (gloss && !isLetterGloss(gloss)) setSignList((list) => (list.includes(gloss) ? list : [...list, gloss]));
+  }, []);
+
+  const deleteSign = useCallback(
+    async (label: string) => {
+      setSignList((list) => list.filter((g) => g !== label));
+      await removeSamples(label);
+      if (lia) await refreshModel(lia);
+    },
+    [lia, removeSamples, refreshModel],
+  );
+
+  const clearSign = useCallback(
+    async (label: string) => {
+      await removeSamples(label);
+      if (lia) await refreshModel(lia);
+    },
+    [lia, removeSamples, refreshModel],
+  );
+
+  /** Todas as gravações, no formato da bancada (lia-dataset). */
+  const exportData = useCallback(async () => {
+    if (!lia) throw new Error("A leitura das mãos ainda não carregou.");
+    return JSON.stringify(await lia.dataset.export());
+  }, [lia]);
+
+  /** Junta gravações de um arquivo (deste totem ou exportadas da bancada). */
+  const importData = useCallback(
+    async (json: string): Promise<ImportReport> => {
+      if (!lia) throw new Error("A leitura das mãos ainda não carregou.");
+      const data = JSON.parse(json) as { version?: number; featureSize?: number };
+      if (data && data.version === 1 && "featureSize" in data) {
+        throw new Error("Este arquivo é da versão anterior do reconhecimento e não serve mais: grave os sinais de novo.");
+      }
+      const report = await lia.dataset.import(data, { merge: true });
+      await refreshModel(lia);
+      return report;
+    },
+    [lia, refreshModel],
+  );
+
+  const vocab = useMemo<VocabItem[]>(() => signList.map((label) => ({ label, count: counts[label] ?? 0 })), [signList, counts]);
+  const alphabetVocab = useMemo<VocabItem[]>(
+    () => ALPHABET.map((a) => ({ label: a.letra, count: counts[a.letra] ?? 0, movimento: a.movimento })),
+    [counts],
+  );
+
+  const status: SignRecognitionStatus = failed ? "error" : !enabled ? "off" : lia ? "ready" : "loading";
 
   return {
     status,
     handsVisible: enabled && handsVisible,
+    /** Palpite ao vivo enquanto o sinal acontece. */
     guess: enabled ? guess : null,
+    /** Último sinal/letra não entendido (some sozinho em 2 s). */
+    missed: enabled && missed,
     words,
-    hasTrainedSigns: !classifier.isEmpty,
-    removeLastWord: () => setPhrase(words.slice(0, -1)),
-    clearWords: () => setPhrase([]),
+    hasTrainedSigns,
+    removeLastWord: () => lia?.undoLast(),
+    clearWords: () => lia?.clearGlosses(),
     sendPhrase,
+    // datilologia
+    mode,
+    setMode,
+    spelling,
+    spellState: enabled ? spellState : null,
+    undoLetter: () => lia?.undoLetter(),
+    clearSpelling: () => lia?.clearSpelling(),
+    commitSpelling: () => lia?.commitSpelling() ?? null,
+    // treino
     vocab,
+    alphabetVocab,
     recording,
     record,
     addSign,
@@ -278,5 +422,6 @@ export function useSignRecognition({ videoRef, overlayRef, enabled, onPhrase }: 
     clearSign,
     exportData,
     importData,
+    hadOldData,
   };
 }

@@ -1,53 +1,84 @@
-import type { HandLandmarkerResult, NormalizedLandmark } from "@mediapipe/tasks-vision";
+import { BODY_POINT_COUNT, HAND_POINT_COUNT } from './landmarks';
+import type { HandSide, Point3 } from './types';
 
 /**
- * Transforma as mãos detectadas pelo MediaPipe num vetor de números que
- * descreve o sinal: formato da mão (21 pontos) + onde ela está no quadro.
+ * Versão do formato do vetor de características. Suba este número sempre que a normalização
+ * ou a ordem dos blocos mudar. As amostras guardam os pontos crus, então basta recalcular.
  *
- * - O formato é relativo ao pulso e dividido pelo tamanho da palma,
- *   então não muda se a pessoa estiver mais perto ou mais longe da câmera.
- * - A posição do pulso no quadro diferencia sinais com a mesma mão em
- *   lugares diferentes (ex.: perto da cabeça × perto da barriga).
+ * v1: bloco local a partir dos worldLandmarks do MediaPipe.
+ * v2: bloco local a partir dos pontos da imagem (os mesmos que ficam guardados nas amostras).
  */
+export const FEATURE_VERSION = 2;
 
-const POINTS = 21;
-const PER_HAND = POINTS * 3 + 2 + 1; // formato + posição + presença
-export const FEATURE_SIZE = PER_HAND * 2; // mão direita + mão esquerda
-
-const LOCATION_WEIGHT = 2;
-const PRESENCE_WEIGHT = 3;
-
-function dist(a: NormalizedLandmark, b: NormalizedLandmark) {
-  return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+export interface FeatureBlock {
+  offset: number;
+  size: number;
 }
 
-function writeHand(out: number[], offset: number, lm: NormalizedLandmark[]) {
-  const wrist = lm[0];
-  const scale = dist(wrist, lm[9]) || 1; // pulso → base do dedo médio
-  for (let i = 0; i < POINTS; i++) {
-    out[offset + i * 3] = (lm[i].x - wrist.x) / scale;
-    out[offset + i * 3 + 1] = (lm[i].y - wrist.y) / scale;
-    out[offset + i * 3 + 2] = (lm[i].z - wrist.z) / scale;
-  }
-  out[offset + POINTS * 3] = (wrist.x - 0.5) * LOCATION_WEIGHT;
-  out[offset + POINTS * 3 + 1] = (wrist.y - 0.5) * LOCATION_WEIGHT;
-  out[offset + POINTS * 3 + 2] = PRESENCE_WEIGHT;
+function buildLayout() {
+  let offset = 0;
+  const block = (size: number): FeatureBlock => {
+    const b = { offset, size };
+    offset += size;
+    return b;
+  };
+  const layout = {
+    /** [mão direita presente, mão esquerda presente]: 0 ou 1. */
+    presence: block(2),
+    /** 8 pontos do tronco × (x, y), relativos aos ombros. */
+    body: block(BODY_POINT_COUNT * 2),
+    /** 21 pontos × (x, y, z) relativos aos ombros: onde a mão está em relação ao corpo. */
+    rightGlobal: block(HAND_POINT_COUNT * 3),
+    leftGlobal: block(HAND_POINT_COUNT * 3),
+    /** 21 pontos × (x, y, z) relativos ao pulso, em "tamanhos de palma": formato e orientação da mão. */
+    rightLocal: block(HAND_POINT_COUNT * 3),
+    leftLocal: block(HAND_POINT_COUNT * 3),
+  } as const;
+  return { layout, dim: offset };
 }
 
-/** Retorna o vetor do quadro, ou null se não há mãos visíveis. */
-export function extractFeatures(result: HandLandmarkerResult): number[] | null {
-  if (!result.landmarks.length) return null;
-  const out = new Array<number>(FEATURE_SIZE).fill(0);
-  const used = new Set<number>();
+const built = buildLayout();
 
-  result.landmarks.forEach((lm, i) => {
-    const side = result.handedness[i]?.[0]?.categoryName;
-    let slot = side === "Left" ? 1 : 0;
-    if (used.has(slot)) slot = 1 - slot; // duas mãos classificadas iguais
-    if (used.has(slot)) return;
-    used.add(slot);
-    writeHand(out, slot * PER_HAND, lm);
-  });
+/** Onde cada bloco começa dentro do vetor de um quadro. */
+export const FEATURE_LAYOUT = built.layout;
 
-  return out;
+/** Tamanho do vetor de um quadro (270 na versão 1). */
+export const FEATURE_DIM: number = built.dim;
+
+export const HAND_FEATURE_BLOCKS: Record<HandSide, { presence: number; global: FeatureBlock; local: FeatureBlock }> = {
+  right: { presence: FEATURE_LAYOUT.presence.offset, global: FEATURE_LAYOUT.rightGlobal, local: FEATURE_LAYOUT.rightLocal },
+  left: { presence: FEATURE_LAYOUT.presence.offset + 1, global: FEATURE_LAYOUT.leftGlobal, local: FEATURE_LAYOUT.leftLocal },
+};
+
+export interface UnpackedHand {
+  /** 21 pontos relativos aos ombros (unidade = largura dos ombros). */
+  global: Point3[];
+  /** 21 pontos relativos ao pulso (unidade = tamanho da palma). */
+  local: Point3[];
+}
+
+export interface UnpackedFeatures {
+  /** 8 pontos do tronco, na ordem de `BODY_POINTS` (z sempre 0). */
+  body: Point3[];
+  hands: Record<HandSide, UnpackedHand | null>;
+}
+
+const readPoints3 = (v: ArrayLike<number>, b: FeatureBlock): Point3[] => {
+  const pts: Point3[] = [];
+  for (let i = 0; i < b.size; i += 3) pts.push({ x: v[b.offset + i], y: v[b.offset + i + 1], z: v[b.offset + i + 2] });
+  return pts;
+};
+
+/** Converte um vetor achatado de volta em pontos nomeados (útil para depurar e desenhar). */
+export function unpackFeatures(vector: ArrayLike<number>): UnpackedFeatures {
+  if (vector.length !== FEATURE_DIM) throw new Error(`Vetor com ${vector.length} posições; esperado ${FEATURE_DIM}.`);
+  const body: Point3[] = [];
+  const bb = FEATURE_LAYOUT.body;
+  for (let i = 0; i < bb.size; i += 2) body.push({ x: vector[bb.offset + i], y: vector[bb.offset + i + 1], z: 0 });
+  const hand = (side: HandSide): UnpackedHand | null => {
+    const blocks = HAND_FEATURE_BLOCKS[side];
+    if (vector[blocks.presence] < 0.5) return null;
+    return { global: readPoints3(vector, blocks.global), local: readPoints3(vector, blocks.local) };
+  };
+  return { body, hands: { right: hand('right'), left: hand('left') } };
 }

@@ -1,0 +1,33 @@
+{
+  "versao": 1,
+  "instrucoes": "Edite à vontade: cada sinal tem 'glosa' (obrigatória, em maiúsculas). 'maos' (1 ou 2) e 'validado' devem ser preenchidos depois de conferir o sinal com intérprete ou com o vídeo do V-LIBRASIL. Prefira sinais de uma mão: são reconhecidos com mais facilidade.",
+  "sinais": [
+    { "glosa": "OI", "categoria": "social", "maos": null, "validado": false, "obs": "" },
+    { "glosa": "SIM", "categoria": "social", "maos": null, "validado": false, "obs": "" },
+    { "glosa": "NÃO", "categoria": "social", "maos": null, "validado": false, "obs": "" },
+    { "glosa": "OBRIGADO", "categoria": "social", "maos": null, "validado": false, "obs": "" },
+    { "glosa": "AJUDA", "categoria": "pedido", "maos": null, "validado": false, "obs": "" },
+    { "glosa": "INTÉRPRETE", "categoria": "pedido", "maos": null, "validado": false, "obs": "" },
+    { "glosa": "DOR", "categoria": "sintoma", "maos": null, "validado": false, "obs": "" },
+    { "glosa": "CABEÇA", "categoria": "corpo", "maos": null, "validado": false, "obs": "" },
+    { "glosa": "BARRIGA", "categoria": "corpo", "maos": null, "validado": false, "obs": "" },
+    { "glosa": "PEITO", "categoria": "corpo", "maos": null, "validado": false, "obs": "" },
+    { "glosa": "GARGANTA", "categoria": "corpo", "maos": null, "validado": false, "obs": "" },
+    { "glosa": "FEBRE", "categoria": "sintoma", "maos": null, "validado": false, "obs": "" },
+    { "glosa": "TOSSE", "categoria": "sintoma", "maos": null, "validado": false, "obs": "" },
+    { "glosa": "VÔMITO", "categoria": "sintoma", "maos": null, "validado": false, "obs": "" },
+    { "glosa": "TONTURA", "categoria": "sintoma", "maos": null, "validado": false, "obs": "" },
+    { "glosa": "REMÉDIO", "categoria": "atendimento", "maos": null, "validado": false, "obs": "" },
+    { "glosa": "CONSULTA", "categoria": "atendimento", "maos": null, "validado": false, "obs": "" },
+    { "glosa": "VACINA", "categoria": "atendimento", "maos": null, "validado": false, "obs": "" },
+    { "glosa": "EXAME", "categoria": "atendimento", "maos": null, "validado": false, "obs": "" },
+    { "glosa": "URGENTE", "categoria": "atendimento", "maos": null, "validado": false, "obs": "" },
+    { "glosa": "HOJE", "categoria": "tempo", "maos": null, "validado": false, "obs": "" },
+    { "glosa": "ONTEM", "categoria": "tempo", "maos": null, "validado": false, "obs": "" },
+    { "glosa": "1", "categoria": "numero", "maos": 1, "validado": false, "obs": "número/quantidade" },
+    { "glosa": "2", "categoria": "numero", "maos": 1, "validado": false, "obs": "número/quantidade" },
+    { "glosa": "3", "categoria": "numero", "maos": 1, "validado": false, "obs": "número/quantidade" },
+    { "glosa": "4", "categoria": "numero", "maos": 1, "validado": false, "obs": "número/quantidade" },
+    { "glosa": "5", "categoria": "numero", "maos": 1, "validado": false, "obs": "número/quantidade" }
+  ]
+}

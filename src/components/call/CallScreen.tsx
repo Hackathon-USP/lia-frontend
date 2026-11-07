@@ -173,16 +173,26 @@ export function CallScreen() {
     setDraft("");
   }
 
+  const spelling = signs.mode === "datilologia";
   const readingHint =
     signs.status === "loading"
       ? "Carregando a leitura das mãos…"
       : signs.status === "error"
-        ? "Não foi possível carregar a leitura das mãos. Verifique a internet."
+        ? "Não foi possível carregar a leitura das mãos. Recarregue a página."
         : signs.status === "off"
           ? "Ligue a câmera para conversar em Libras."
           : !signs.hasTrainedSigns
             ? "Nenhum sinal ensinado ainda. Toque em “Ensinar sinais” para gravar os primeiros."
-            : "Sinalize de frente para a câmera. Abaixe as mãos para enviar a frase.";
+            : spelling
+              ? "Soletre letra por letra: cada letra conta quando a mão fica parada."
+              : "Sinalize de frente para a câmera. Abaixe as mãos para enviar a frase.";
+
+  const SPELL_HINT: Record<string, string> = {
+    "sem-mao": "Levante a mão acima da cintura.",
+    movendo: "Forme a letra…",
+    segurando: "Segure…",
+    solte: "Mude a mão para a próxima letra (ou deslize para repetir).",
+  };
 
   return (
     <div className="lia-call fixed inset-0 flex flex-col bg-tinta font-sans text-white">
@@ -274,12 +284,36 @@ export function CallScreen() {
             ) : (
               <span className="text-sm text-white/80">{readingHint}</span>
             )}
-            {signs.guess && (
+            {spelling && signs.status === "ready" && (
+              <span className="flex items-center gap-1 rounded-full border border-dashed border-ambar/70 px-3 py-1 font-bold tracking-widest text-ambar">
+                {signs.spelling.join("") || "…"}
+                <span aria-hidden="true" className="motion-safe:animate-pulse">
+                  _
+                </span>
+              </span>
+            )}
+            {spelling && signs.spellState && <span className="text-sm text-white/80">{SPELL_HINT[signs.spellState]}</span>}
+            {!spelling && signs.guess && (
               <span className="text-sm text-ambar">
                 vendo: {signs.guess.label} ({Math.round(signs.guess.confidence * 100)}%)
               </span>
             )}
+            {signs.missed && (
+              <span role="status" className="text-sm font-semibold text-red-300">
+                Não entendi. Repita, por favor.
+              </span>
+            )}
           </div>
+          {spelling && signs.spelling.length > 0 && (
+            <div className="flex gap-2">
+              <button type="button" onClick={signs.undoLetter} className={`${pillBtn} bg-white/15 hover:bg-white/25`}>
+                Apagar letra
+              </button>
+              <button type="button" onClick={signs.commitSpelling} className={`${pillBtn} bg-ambar text-tinta hover:bg-ambar/90`}>
+                Confirmar palavra
+              </button>
+            </div>
+          )}
           {signs.words.length > 0 && (
             <div className="flex gap-2">
               <button type="button" onClick={signs.removeLastWord} className={`${pillBtn} bg-white/15 hover:bg-white/25`}>
@@ -321,6 +355,20 @@ export function CallScreen() {
             <span className="sr-only md:hidden">Ensinar sinais</span>
           </button>
 
+          {/* Alterna entre sinais e soletrar (datilologia), para nomes e o que não tem sinal. */}
+          <button
+            type="button"
+            aria-pressed={spelling}
+            onClick={() => signs.setMode(spelling ? "sinais" : "datilologia")}
+            className={`${roundBtn} w-auto gap-2 px-4 font-semibold ${spelling ? "bg-ambar text-tinta hover:bg-ambar/90" : "bg-white/15 hover:bg-white/25"}`}
+          >
+            <span aria-hidden="true" className="font-bold tracking-wider">
+              ABC
+            </span>
+            <span className="hidden md:inline">{spelling ? "Voltar aos sinais" : "Soletrar"}</span>
+            <span className="sr-only md:hidden">{spelling ? "Voltar aos sinais" : "Soletrar"}</span>
+          </button>
+
           {/* Também dá para digitar o comando. */}
           <form onSubmit={handleSubmit} className="order-last flex w-full min-w-0 gap-2 sm:order-none sm:flex-1">
             <label htmlFor="call-command" className="sr-only">
@@ -355,6 +403,7 @@ export function CallScreen() {
         pipSide={pipSide}
         cameraReady={cameraOn && signs.status === "ready"}
         vocab={signs.vocab}
+        alphabetVocab={signs.alphabetVocab}
         recording={signs.recording}
         record={signs.record}
         addSign={signs.addSign}
@@ -362,6 +411,7 @@ export function CallScreen() {
         clearSign={signs.clearSign}
         exportData={signs.exportData}
         importData={signs.importData}
+        hadOldData={signs.hadOldData}
       />
     </div>
   );
