@@ -36,9 +36,11 @@ function statusFromError(err: unknown): CameraStatus {
 export function useCamera() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const requestVersion = useRef(0);
   const [status, setStatus] = useState<CameraStatus>("idle");
 
   const stop = useCallback(() => {
+    requestVersion.current += 1;
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
     if (videoRef.current) videoRef.current.srcObject = null;
@@ -46,6 +48,8 @@ export function useCamera() {
   }, []);
 
   const start = useCallback(async () => {
+    stop();
+    const version = requestVersion.current;
     if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia || !window.isSecureContext) {
       setStatus("unsupported");
       return;
@@ -53,6 +57,10 @@ export function useCamera() {
     setStatus("requesting");
     try {
       const stream = await navigator.mediaDevices.getUserMedia(CONSTRAINTS);
+      if (version !== requestVersion.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
       streamRef.current = stream;
       // Se a câmera for desconectada ou revogada no meio do uso.
       stream.getVideoTracks()[0]?.addEventListener("ended", () => stop());
@@ -60,14 +68,17 @@ export function useCamera() {
         videoRef.current.srcObject = stream;
         await videoRef.current.play().catch(() => {});
       }
-      setStatus("active");
+      if (version === requestVersion.current) setStatus("active");
     } catch (err) {
-      setStatus(statusFromError(err));
+      if (version === requestVersion.current) setStatus(statusFromError(err));
     }
   }, [stop]);
 
   // Desliga a câmera ao sair da página (a luz da câmera não fica acesa).
-  useEffect(() => () => streamRef.current?.getTracks().forEach((t) => t.stop()), []);
+  useEffect(() => () => {
+    requestVersion.current += 1;
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+  }, []);
 
   return { videoRef, status, start, stop, isActive: status === "active" };
 }

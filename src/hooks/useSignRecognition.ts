@@ -272,6 +272,8 @@ export function useSignRecognition({ videoRef, overlayRef, enabled, onPhrase }: 
     return () => {
       offs.forEach((off) => off());
       clearTimeout(missTimer.current);
+      lia.clearGlosses();
+      lia.clearSpelling();
     };
   }, [lia, overlayRef]);
 

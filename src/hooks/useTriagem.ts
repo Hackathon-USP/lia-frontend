@@ -59,15 +59,17 @@ export interface UseTriagemOptions {
   /** Faz a LIA sinalizar (e legendar) um texto. */
   falar: (texto: string) => void;
   modo?: ModoAcessibilidade;
+  onReset?: () => void;
 }
 
-export function useTriagem({ falar, modo = "libras" }: UseTriagemOptions) {
+export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOptions) {
   const [fase, setFase] = useState<FaseTriagem>("conectando");
   const [pergunta, setPergunta] = useState<Pergunta | null>(null);
   const [finalizacao, setFinalizacao] = useState<Finalizacao | null>(null);
   const [carregando, setCarregando] = useState(false);
   const [lento, setLento] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [consentimento, setConsentimento] = useState(TEXTOS_PADRAO.consentimento);
 
   const falarRef = useRef(falar);
   const textosRef = useRef<TextosTotem>(TEXTOS_PADRAO);
@@ -75,6 +77,7 @@ export function useTriagem({ falar, modo = "libras" }: UseTriagemOptions) {
   const perguntaRef = useRef<Pergunta | null>(null);
   const faseRef = useRef<FaseTriagem>("conectando");
   const ocupado = useRef(false);
+  const generation = useRef(0);
   const ultimaAcao = useRef<(() => Promise<void>) | null>(null);
   /** Versão mais recente das ações, para o "Tentar de novo" refazer a que falhou. */
   const acoes = useRef<{
@@ -100,21 +103,26 @@ export function useTriagem({ falar, modo = "libras" }: UseTriagemOptions) {
   /** Executa uma chamada ao back com "carregando", aviso de lentidão e erro amigável. */
   const chamar = useCallback(async <T,>(fn: () => Promise<T>, refazer: () => Promise<void>): Promise<T | undefined> => {
     if (ocupado.current) return undefined;
+    const requestGeneration = generation.current;
     ocupado.current = true;
     setCarregando(true);
     setErro(null);
-    const timer = setTimeout(() => setLento(true), LENTO_MS);
+    const timer = setTimeout(() => { if (requestGeneration === generation.current) setLento(true); }, LENTO_MS);
     try {
-      return await fn();
+      const result = await fn();
+      return requestGeneration === generation.current ? result : undefined;
     } catch (err) {
+      if (requestGeneration !== generation.current) return undefined;
       ultimaAcao.current = refazer;
       setErro(mensagemDeErro(err));
       return undefined;
     } finally {
       clearTimeout(timer);
-      setLento(false);
-      setCarregando(false);
-      ocupado.current = false;
+      if (requestGeneration === generation.current) {
+        setLento(false);
+        setCarregando(false);
+        ocupado.current = false;
+      }
     }
   }, []);
 
@@ -152,6 +160,7 @@ export function useTriagem({ falar, modo = "libras" }: UseTriagemOptions) {
   );
 
   const comecar = useCallback(async () => {
+    const requestGeneration = generation.current;
     setErro(null);
     setFinalizacao(null);
     mudarPergunta(null);
@@ -161,6 +170,7 @@ export function useTriagem({ falar, modo = "libras" }: UseTriagemOptions) {
     const salvo = lerSessao();
     if (salvo) {
       const at = await chamar(() => consultarAtendimento(salvo), async () => acoes.current?.comecar());
+      if (!at) return;
       if (at?.status === "em_andamento") {
         await aplicar({ ...at, repetir: false });
         return;
@@ -169,7 +179,9 @@ export function useTriagem({ falar, modo = "libras" }: UseTriagemOptions) {
     }
 
     const textos = await buscarTextos().catch(() => null);
+    if (requestGeneration !== generation.current) return;
     if (textos) textosRef.current = { ...TEXTOS_PADRAO, ...textos };
+    setConsentimento(textosRef.current.consentimento);
     mudarFase("consentimento");
     falarRef.current(`${textosRef.current.boas_vindas} ${textosRef.current.consentimento}`);
   }, [aplicar, chamar, mudarFase, mudarPergunta]);
@@ -233,11 +245,29 @@ export function useTriagem({ falar, modo = "libras" }: UseTriagemOptions) {
     void acao?.();
   }, []);
 
+  const limpar = useCallback(() => {
+    generation.current += 1;
+    ocupado.current = false;
+    ultimaAcao.current = null;
+    atendimentoRef.current = null;
+    salvarSessao(null);
+    mudarPergunta(null);
+    mudarFase("conectando");
+    setFinalizacao(null);
+    setErro(null);
+    setLento(false);
+    setCarregando(false);
+  }, [mudarFase, mudarPergunta]);
+
   const recomecar = useCallback(() => {
     salvarSessao(null);
     atendimentoRef.current = null;
+    if (onReset) {
+      onReset();
+      return;
+    }
     void comecar();
-  }, [comecar]);
+  }, [comecar, onReset]);
 
   // Acorda o back já ao abrir a tela (Render gratuito demora no primeiro acesso).
   useEffect(() => {
@@ -253,6 +283,8 @@ export function useTriagem({ falar, modo = "libras" }: UseTriagemOptions) {
 
   return {
     fase,
+    consentimento,
+    limpar,
     pergunta,
     finalizacao,
     carregando,

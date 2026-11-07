@@ -4,7 +4,7 @@ import type { ReactElement } from "react";
 import type { NextPageWithLayout } from "./_app";
 
 // Só no navegador: usa câmera, WebGL e os sinais salvos no localStorage.
-const CallScreen = dynamic(() => import("@/components/call/CallScreen").then((m) => m.CallScreen), {
+const CallScreen = dynamic(() => import("@/components/call/TotemScreen").then((m) => m.TotemScreen), {
   ssr: false,
   loading: () => (
     <div className="fixed inset-0 flex items-center justify-center bg-tinta text-xl font-bold text-white">

@@ -1,8 +1,6 @@
-import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { alignGlossToWords, type WordRange } from "@/lib/libras/alignCaption";
 import { env } from "@/config/env";
-import { ROUTES } from "@/routes";
 import { useCamera } from "@/hooks/useCamera";
 import { useSignRecognition } from "@/hooks/useSignRecognition";
 import { useTriagem } from "@/hooks/useTriagem";
@@ -96,10 +94,10 @@ function LiaCaption({ text, gloss, glossIndex, playing }: { text: string; gloss:
   );
 }
 
-const roundBtn =
-  "inline-flex size-12 shrink-0 items-center justify-center rounded-full focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ambar sm:size-14";
+const controlBtn =
+  "inline-flex min-h-16 items-center justify-center gap-3 rounded-2xl border px-5 py-3 text-base font-semibold transition-colors focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ambar disabled:cursor-not-allowed disabled:opacity-50";
 const pillBtn =
-  "inline-flex min-h-10 items-center rounded-full px-4 text-sm font-semibold focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ambar disabled:opacity-50";
+  "inline-flex min-h-16 items-center rounded-full px-4 text-sm font-semibold focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ambar disabled:opacity-50";
 
 /**
  * Tela de "chamada de vídeo" do totem.
@@ -107,9 +105,9 @@ const pillBtn =
  * Ida:   Libras (câmera), toque ou texto → back da LIA (triagem: /atendimentos)
  * Volta: pergunta/mensagem do back → glosa VLibras → avatar sinaliza + legenda em português
  */
-export function CallScreen() {
+export function CallScreen({ modo = "libras", active = true, onEnd }: { modo?: ModoAcessibilidade; active?: boolean; onEnd?: () => void }) {
   const { videoRef, status: cameraStatus, start: startCamera, stop: stopCamera, isActive: cameraOn } = useCamera();
-  const { iframeRef, ready, loadProgress, playing, failed, glossIndex, play } = useVLibrasPlayer(env.liaAvatar);
+  const { iframeRef, ready, loadProgress, playing, failed, glossIndex, play, stop: stopPlayer } = useVLibrasPlayer(env.liaAvatar);
   const overlayRef = useRef<HTMLCanvasElement>(null);
   const [pipSide, setPipSide] = useState<PipSide>("right");
   const [trainerOpen, setTrainerOpen] = useState(false);
@@ -117,25 +115,28 @@ export function CallScreen() {
   const [liaGloss, setLiaGloss] = useState("");
   const [userCaption, setUserCaption] = useState("");
   const [draft, setDraft] = useState("");
+  const [typing, setTyping] = useState(false);
   const [translateError, setTranslateError] = useState(false);
-  const greeted = useRef(false);
+  const speechVersion = useRef(0);
 
   /** Faz a LIA sinalizar (e legendar) um texto em português. */
   async function speak(text: string) {
+    const version = ++speechVersion.current;
     setLiaCaption(text);
     setLiaGloss("");
     setTranslateError(false);
     try {
       const gloss = await translateToGloss(text);
+      if (version !== speechVersion.current) return;
       setLiaGloss(gloss);
       play(gloss);
     } catch {
-      setTranslateError(true);
+      if (version === speechVersion.current) setTranslateError(true);
     }
   }
 
   // Triagem no back: cada pergunta/mensagem do back a LIA sinaliza.
-  const triagem = useTriagem({ falar: (texto) => void speak(texto), modo: "libras" });
+  const triagem = useTriagem({ falar: (texto) => void speak(texto), modo, onReset: onEnd });
 
   /** O que o paciente disse, venha da Libras (câmera) ou do campo de texto. */
   function handleCommand(text: string, canal: ModoAcessibilidade) {
@@ -148,25 +149,44 @@ export function CallScreen() {
   const signs = useSignRecognition({
     videoRef,
     overlayRef,
-    enabled: cameraOn, // a leitura continua durante o treino (é ela que grava os exemplos)
+    enabled: active && cameraOn, // a leitura continua durante o treino (é ela que grava os exemplos)
     onPhrase: (text) => {
       // Durante o treino, o que for reconhecido não é enviado.
-      if (!trainerOpen) handleCommand(text, "libras");
+      if (active && !trainerOpen && !triagem.carregando) {
+        window.dispatchEvent(new Event("lia:activity"));
+        handleCommand(text, "libras");
+      }
     },
   });
 
-  // No totem a câmera liga sozinha ao abrir a chamada.
+  // Preserve o player, mas descarte todo o estado do paciente na troca de sessão.
   useEffect(() => {
-    void startCamera();
-  }, [startCamera]);
+    speechVersion.current += 1;
+    stopPlayer();
+    triagem.limpar();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- limpa a sessão sem desmontar o player Unity
+    setLiaCaption("");
+    setLiaGloss("");
+    setUserCaption("");
+    setDraft("");
+    setTyping(false);
+    setTrainerOpen(false);
+    setTranslateError(false);
+    setPipSide("right");
+    signs.clearWords();
+    signs.clearSpelling();
+    signs.setMode("sinais");
+    if (active) void triagem.comecar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- sessão muda apenas ao entrar/sair do atendimento
+  }, [active]);
 
-  // Começa o atendimento (boas-vindas + consentimento) assim que o avatar carrega.
   useEffect(() => {
-    if (!ready || greeted.current) return;
-    greeted.current = true;
-    void triagem.comecar();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- só uma vez, quando o player fica pronto
-  }, [ready]);
+    if (active && modo === "libras") void startCamera();
+    else stopCamera();
+    return stopCamera;
+  }, [active, modo, startCamera, stopCamera]);
+
+  useEffect(() => () => { speechVersion.current += 1; }, []);
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -174,6 +194,8 @@ export function CallScreen() {
     setDraft("");
   }
 
+  const completed = triagem.fase === "finalizado" || triagem.fase === "recusado";
+  const libras = modo === "libras";
   const spelling = signs.mode === "datilologia";
   const readingHint =
     signs.status === "loading"
@@ -183,7 +205,7 @@ export function CallScreen() {
         : signs.status === "off"
           ? "Ligue a câmera para conversar em Libras."
           : !signs.hasTrainedSigns
-            ? "Nenhum sinal ensinado ainda. Toque em “Ensinar sinais” para gravar os primeiros."
+            ? "Use as opções na tela para responder."
             : spelling
               ? "Soletre letra por letra: cada letra conta quando a mão fica parada."
               : "Sinalize de frente para a câmera. Abaixe as mãos para enviar a frase.";
@@ -196,11 +218,13 @@ export function CallScreen() {
   };
 
   return (
-    <div className="lia-call fixed inset-0 flex flex-col bg-tinta font-sans text-white">
+    <div inert={!active} aria-hidden={!active} className={`lia-call fixed inset-0 flex flex-col overflow-y-auto bg-tinta font-sans text-white ${active ? "" : "invisible pointer-events-none"}`}>
       <h1 className="sr-only">Chamada com a LIA</h1>
 
+      <div className={`totem-content grid flex-1 ${completed && !libras ? "" : libras && !completed ? "lg:grid-cols-[55%_45%]" : "lg:grid-cols-[35%_65%]"}`}>
       {/* Palco: a LIA, num fundo suave em vez do branco puro do player */}
-      <main className="relative min-h-0 flex-1 overflow-hidden bg-[#E6E1D8] text-tinta">
+      <main className={`${completed && !libras ? "hidden" : "flex"} min-h-[380px] flex-col bg-[#E6E1D8] text-tinta`}>
+        <div className="relative min-h-[320px] flex-1">
         <iframe
           ref={iframeRef}
           src={VLIBRAS_PLAYER_SRC}
@@ -210,7 +234,7 @@ export function CallScreen() {
           tabIndex={-1}
           // O player desenha fundo branco; "multiply" troca o branco pela cor do palco
           // e quase não altera as cores do avatar.
-          className={`absolute inset-0 h-full w-full border-0 mix-blend-multiply transition-opacity duration-500 motion-reduce:transition-none ${
+          className={`absolute inset-x-0 bottom-0 h-[calc(100%-112px)] w-full border-0 mix-blend-multiply transition-opacity duration-500 motion-reduce:transition-none ${
             ready ? "opacity-100" : "opacity-0"
           }`}
         />
@@ -219,7 +243,7 @@ export function CallScreen() {
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-6 text-center">
             {failed ? (
               <p role="alert" className="text-lg">
-                Este aparelho não consegue mostrar o avatar (WebGL indisponível).
+                O avatar está indisponível. Você pode continuar pelas opções na tela.
               </p>
             ) : (
               <>
@@ -250,35 +274,13 @@ export function CallScreen() {
           <span className="text-sm text-white/85">{playing ? "sinalizando" : ready ? "ao vivo" : "conectando"}</span>
         </div>
 
-        <CameraPip videoRef={videoRef} overlayRef={overlayRef} status={cameraStatus} side={pipSide} handsVisible={signs.handsVisible} />
+        <div className={libras ? "" : "hidden"}><CameraPip videoRef={videoRef} overlayRef={overlayRef} status={cameraStatus} side={pipSide} handsVisible={signs.handsVisible} /></div>
 
-        {/* Legendas */}
-        <div className="absolute inset-x-0 bottom-4 z-10 flex flex-col items-center gap-2 px-4" aria-live="polite">
-          {userCaption && (
-            <p className="max-w-2xl rounded-2xl bg-tinta/75 px-4 py-2 text-center text-white">
-              <span className="font-bold">Você: </span>
-              {userCaption}
-            </p>
-          )}
-          {triagem.carregando && (
-            <p className="rounded-2xl bg-tinta/85 px-4 py-2 text-white">
-              {triagem.lento ? "Conectando ao sistema da unidade… pode levar até 1 minuto." : "LIA está pensando…"}
-            </p>
-          )}
+        </div>
+        {/* Legendas ficam fora do espaço do avatar. */}
+        <div className="flex flex-col items-center gap-2 bg-creme p-4" aria-live="polite">
           {liaCaption && !triagem.carregando && (
             <LiaCaption text={liaCaption} gloss={liaGloss} glossIndex={glossIndex} playing={playing} />
-          )}
-          {triagem.erro && (
-            <p role="alert" className="flex flex-wrap items-center justify-center gap-3 rounded-2xl bg-red-700 px-4 py-2 text-white">
-              {triagem.erro}
-              <button
-                type="button"
-                onClick={triagem.tentarDeNovo}
-                className="rounded-full bg-white px-4 py-1 font-semibold text-red-800 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ambar"
-              >
-                Tentar de novo
-              </button>
-            </p>
           )}
           {translateError && !triagem.erro && (
             <p role="alert" className="rounded-2xl bg-red-700 px-4 py-2 text-white">
@@ -288,8 +290,32 @@ export function CallScreen() {
         </div>
       </main>
 
+      <div className="flex flex-col justify-center bg-petroleo-escuro/40">
+      <div className="mx-auto flex min-h-20 w-full max-w-3xl flex-col justify-center gap-3 px-6 py-3" aria-live="polite">
+          {triagem.carregando && (
+            <p className="rounded-2xl bg-tinta/85 px-4 py-2 text-white">
+              {triagem.lento ? "Conectando ao sistema da unidade… pode levar até 1 minuto." : "LIA está pensando…"}
+            </p>
+          )}
+          {triagem.erro && (
+            <p role="alert" className="flex flex-wrap items-center justify-center gap-3 rounded-2xl bg-red-700 px-4 py-2 text-white">
+              {triagem.erro}
+              <button
+                type="button"
+                onClick={triagem.tentarDeNovo}
+                className="min-h-16 rounded-2xl bg-white px-6 py-3 font-semibold text-red-800 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ambar"
+              >
+                Tentar de novo
+              </button>
+            </p>
+          )}
+      </div>
       {/* Respostas por toque (as mesmas que podem ser sinalizadas) */}
+      {userCaption && !completed && <p className="mx-auto w-full max-w-3xl px-8 text-lg text-white/80">Sua última resposta · {userCaption}</p>}
       <TriagemPanel
+        key={triagem.fase}
+        libras={libras}
+        consentimento={triagem.consentimento}
         fase={triagem.fase}
         pergunta={triagem.pergunta}
         finalizacao={triagem.finalizacao}
@@ -308,8 +334,10 @@ export function CallScreen() {
         }}
       />
 
+      </div>
+      </div>
       {/* Frase sendo montada em Libras */}
-      <section aria-label="Sua frase em Libras" className="shrink-0 border-t border-white/10 bg-black/30 px-3 py-3 sm:px-6">
+      {!completed && libras && <section aria-label="Sua frase em Libras" className="shrink-0 border-t border-white/10 bg-black/30 px-3 py-3 sm:px-6">
         <div className="mx-auto flex max-w-4xl flex-wrap items-center gap-2">
           <div className="flex min-h-10 min-w-0 flex-1 flex-wrap items-center gap-2" aria-live="polite">
             {signs.words.length ? (
@@ -362,77 +390,62 @@ export function CallScreen() {
             </div>
           )}
         </div>
-      </section>
+      </section>}
 
       {/* Controles da chamada */}
-      <div className="shrink-0 bg-black/40 px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6">
-        <div className="mx-auto flex max-w-4xl flex-wrap items-center gap-2 sm:flex-nowrap sm:gap-3">
-          <button
-            type="button"
-            onClick={cameraOn ? stopCamera : startCamera}
-            disabled={cameraStatus === "requesting"}
-            className={`${roundBtn} ${cameraOn ? "bg-white/15 hover:bg-white/25" : "bg-white text-tinta hover:bg-white/90"}`}
-          >
-            {cameraOn ? <IconCamera /> : <IconCameraOff />}
-            <span className="sr-only">{cameraOn ? "Desligar câmera" : "Ligar câmera"}</span>
-          </button>
-
-          <button type="button" onClick={() => setPipSide((s) => (s === "right" ? "left" : "right"))} className={`${roundBtn} bg-white/15 hover:bg-white/25`}>
-            <IconSwap />
-            <span className="sr-only">Mover minha câmera para a {pipSide === "right" ? "esquerda" : "direita"}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setTrainerOpen(true)}
-            className={`${roundBtn} w-auto gap-2 bg-white/15 px-4 hover:bg-white/25 sm:w-auto`}
-          >
-            <IconHand />
-            <span className="hidden font-semibold md:inline">Ensinar sinais</span>
-            <span className="sr-only md:hidden">Ensinar sinais</span>
-          </button>
-
-          {/* Alterna entre sinais e soletrar (datilologia), para nomes e o que não tem sinal. */}
-          <button
-            type="button"
-            aria-pressed={spelling}
-            onClick={() => signs.setMode(spelling ? "sinais" : "datilologia")}
-            className={`${roundBtn} w-auto gap-2 px-4 font-semibold ${spelling ? "bg-ambar text-tinta hover:bg-ambar/90" : "bg-white/15 hover:bg-white/25"}`}
-          >
-            <span aria-hidden="true" className="font-bold tracking-wider">
-              ABC
-            </span>
-            <span className="hidden md:inline">{spelling ? "Voltar aos sinais" : "Soletrar"}</span>
-            <span className="sr-only md:hidden">{spelling ? "Voltar aos sinais" : "Soletrar"}</span>
-          </button>
-
-          {/* Também dá para digitar o comando. */}
-          <form onSubmit={handleSubmit} className="order-last flex w-full min-w-0 gap-2 sm:order-none sm:flex-1">
-            <label htmlFor="call-command" className="sr-only">
-              Comando para a LIA
-            </label>
-            <input
-              id="call-command"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              maxLength={MAX_MESSAGE_LENGTH}
-              placeholder="Ou digite aqui…"
-              autoComplete="off"
-              enterKeyHint="send"
-              className="min-h-12 min-w-0 flex-1 rounded-full border border-white/25 bg-white/10 px-5 text-base text-white placeholder:text-white/70 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ambar sm:min-h-14"
-            />
-            <button type="submit" disabled={triagem.carregando || !draft.trim()} className={`${roundBtn} bg-petroleo hover:bg-petroleo-escuro disabled:opacity-50`}>
-              <IconSend />
-              <span className="sr-only">Enviar</span>
-            </button>
-          </form>
-
-          <Link href={ROUTES.home} className={`${roundBtn} ml-auto bg-red-600 hover:bg-red-700 sm:ml-0`}>
-            <IconEnd />
-            <span className="sr-only">Encerrar atendimento</span>
-          </Link>
-        </div>
-      </div>
+      <footer className="sticky bottom-0 z-30 shrink-0 border-t border-white/15 bg-tinta px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6">
+        {!completed && (
+          <div className="mx-auto max-w-6xl space-y-4">
+            <div aria-label="Controles do atendimento" className={`grid grid-cols-2 gap-3 ${libras ? "lg:grid-cols-5" : "mx-auto max-w-2xl"}`}>
+              {libras && <>
+                <button type="button" onClick={cameraOn ? stopCamera : startCamera}
+                  disabled={cameraStatus === "requesting"} aria-pressed={cameraOn}
+                  className={`${controlBtn} border-white/25 bg-white/10 hover:bg-white/20`}>
+                  {cameraOn ? <IconCamera /> : <IconCameraOff />}
+                  <span>{cameraOn ? "Desligar câmera" : "Ligar câmera"}</span>
+                </button>
+                <button type="button" onClick={() => setPipSide((side) => side === "right" ? "left" : "right")}
+                  className={`${controlBtn} border-white/25 bg-white/10 hover:bg-white/20`}>
+                  <IconSwap /><span>Mover câmera</span>
+                </button>
+                <button type="button" aria-pressed={spelling}
+                  onClick={() => signs.setMode(spelling ? "sinais" : "datilologia")}
+                  className={`${controlBtn} ${spelling ? "border-ambar bg-ambar text-tinta" : "border-white/25 bg-white/10 hover:bg-white/20"}`}>
+                  <span aria-hidden="true" className="font-bold">ABC</span>
+                  <span>{spelling ? "Voltar aos sinais" : "Soletrar"}</span>
+                </button>
+              </>}
+              <button type="button" aria-expanded={typing} aria-controls="typing-answer"
+                onClick={() => setTyping(!typing)}
+                className={`${controlBtn} ${typing ? "border-ambar bg-ambar text-tinta" : "border-white/25 bg-white/10 hover:bg-white/20"}`}>
+                <span>{typing ? "Fechar digitação" : "Digitar resposta"}</span>
+              </button>
+              <button type="button" disabled={triagem.carregando} onClick={() => {
+                signs.clearWords();
+                signs.clearSpelling();
+                triagem.recomecar();
+              }} className={`${controlBtn} border-red-300/50 bg-red-950/40 text-red-100 hover:bg-red-900/60 ${libras ? "col-span-2 lg:col-span-1" : ""}`}>
+                <IconEnd /><span>Encerrar</span>
+              </button>
+            </div>
+            {typing && <form id="typing-answer" onSubmit={handleSubmit} className="flex flex-wrap gap-3 rounded-2xl bg-white/5 p-3">
+              <label htmlFor="call-command" className="w-full text-base font-semibold">Digite sua resposta</label>
+              <input autoFocus id="call-command" value={draft} onChange={(event) => setDraft(event.target.value)}
+                maxLength={MAX_MESSAGE_LENGTH} placeholder="Escreva aqui…" autoComplete="off" enterKeyHint="send"
+                className="min-h-16 min-w-0 flex-1 rounded-2xl border border-white/30 bg-white/10 px-5 text-xl text-white placeholder:text-white/60 focus-visible:outline-3 focus-visible:outline-ambar" />
+              <button type="submit" disabled={triagem.carregando || !draft.trim()}
+                className={`${controlBtn} border-petroleo bg-petroleo hover:bg-petroleo-escuro`}>
+                <IconSend /><span>Enviar</span>
+              </button>
+            </form>}
+            {!onEnd && <button type="button" onClick={() => setTrainerOpen(true)}
+              className={`${controlBtn} border-white/25 bg-white/10 hover:bg-white/20`}>
+              <IconHand /><span>Ensinar sinais</span>
+            </button>}
+          </div>
+        )}
+        <p className="mt-3 text-center text-base text-white/75">Precisa de ajuda? Procure a recepção.</p>
+      </footer>
 
       <SignTrainer
         open={trainerOpen}
