@@ -36,6 +36,24 @@ body {
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }
 
+/*
+ * Ícones dentro de botões/links não recebem o clique: o clique vai para o botão.
+ * Evita um erro do widget do VLibras, que tenta ler `innerText` do <svg> clicado
+ * (SVG não tem innerText → "Cannot read properties of undefined (reading 'trim')").
+ */
+button svg,
+a svg {
+  pointer-events: none;
+}
+
+/* ---------- Chamada /chat ---------- */
+
+/* Na chamada a LIA já sinaliza na tela principal: esconde o widget flutuante do VLibras. */
+body:has(.lia-call) #vlibras-access-wrapper,
+body:has(.lia-call) #vlibras-app-root {
+  display: none !important;
+}
+
 /* ---------- Landing /sobre ---------- */
 
 /* Rolagem suave só para quem não pediu menos movimento. */

@@ -15,7 +15,8 @@ export async function sendMessage(req: SendMessageRequest): Promise<SendMessageR
     await new Promise((r) => setTimeout(r, 600));
     return {
       conversationId: req.conversationId ?? "mock",
-      reply: createMessage("lia", `(mock) Você disse: "${req.message}"`),
+      // resposta de teste (NEXT_PUBLIC_USE_MOCK=true): repete o que a pessoa disse
+      reply: createMessage("lia", `Entendi. Você disse: ${req.message}.`),
     };
   }
   return api<SendMessageResponse>(API_ROUTES.chat.send, { method: "POST", body: req });

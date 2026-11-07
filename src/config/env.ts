@@ -9,4 +9,14 @@ export const env = {
   useMock: process.env.NEXT_PUBLIC_USE_MOCK !== "false",
   /** Raiz do VLibras */
   vlibrasUrl: process.env.NEXT_PUBLIC_VLIBRAS_URL ?? "https://vlibras.gov.br/app",
+  /** Avatar do VLibras que dá corpo à LIA: "hosana" (padrão), "icaro" ou "guga" */
+  liaAvatar: (["hosana", "icaro", "guga"].includes(process.env.NEXT_PUBLIC_LIA_AVATAR ?? "")
+    ? process.env.NEXT_PUBLIC_LIA_AVATAR
+    : "hosana") as "hosana" | "icaro" | "guga",
+  /** Versão do player Unity do VLibras (a mesma que o plugin oficial carrega) */
+  vlibrasPlayerVersion: "7.12.2",
+  /** API pública do VLibras: português → glosa em Libras */
+  vlibrasTranslateUrl: process.env.NEXT_PUBLIC_VLIBRAS_TRANSLATE_URL ?? "https://traducao2.vlibras.gov.br/translate",
+  /** Dicionário de sinais usado pelo player */
+  vlibrasDictionaryUrl: "https://dicionario2.vlibras.gov.br/2018.3.1/WEBGL/",
 } as const;

@@ -6,7 +6,7 @@ export default function HomePage() {
     <div className="flex flex-1 flex-col items-center justify-center gap-5 text-center sm:gap-6">
       <h1 className="text-3xl font-bold sm:text-4xl md:text-5xl">Olá, eu sou a LIA</h1>
       <p className="max-w-md text-base opacity-80 md:max-w-lg md:text-lg">
-        Converse comigo e acompanhe as respostas em Libras com a Hosana, do VLibras.
+        Converse comigo em Libras. Eu vejo seus sinais pela câmera e respondo em Libras.
       </p>
       <Link
         href={ROUTES.chat}

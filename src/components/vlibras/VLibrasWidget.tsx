@@ -21,7 +21,8 @@ export function VLibrasWidget() {
         src={`${env.vlibrasUrl}/vlibras-plugin.js`}
         strategy="afterInteractive"
         onLoad={() => {
-          if (window.VLibras) new window.VLibras.Widget(env.vlibrasUrl);
+          // Mesmo avatar da LIA no widget do site.
+          if (window.VLibras) new window.VLibras.Widget({ rootPath: env.vlibrasUrl, avatar: env.liaAvatar });
         }}
       />
     </>
