@@ -6,7 +6,7 @@ export function ChatWindow() {
   const { messages, loading, error, send } = useChat();
 
   return (
-    <section className="flex flex-1 flex-col gap-4">
+    <section className="flex min-h-0 flex-1 flex-col gap-3 sm:gap-4">
       <MessageList messages={messages} loading={loading} />
       {error && (
         <p role="alert" className="text-sm text-red-600">

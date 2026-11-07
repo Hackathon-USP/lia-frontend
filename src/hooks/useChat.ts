@@ -1,30 +1,27 @@
-import { useCallback, useRef, useState } from "react";
-import { chatService } from "@/lib/data/services/chat.service";
-import { createMessage, validateMessage } from "@/lib/domain/message";
+import { useRef, useState } from "react";
+import { createMessage, MAX_MESSAGE_LENGTH, sendMessage } from "@/services";
 import type { Message } from "@/types";
 
 export function useChat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const conversationId = useRef<string | undefined>(undefined);
+  const conversationId = useRef<string>(undefined);
 
-  const send = useCallback(async (text: string) => {
-    const invalid = validateMessage(text);
-    if (invalid) {
-      setError(invalid);
+  async function send(text: string) {
+    const message = text.trim();
+    if (!message) return;
+    if (message.length > MAX_MESSAGE_LENGTH) {
+      setError(`Máximo de ${MAX_MESSAGE_LENGTH} caracteres.`);
       return;
     }
 
     setError(null);
-    setMessages((prev) => [...prev, createMessage("user", text.trim())]);
+    setMessages((prev) => [...prev, createMessage("user", message)]);
     setLoading(true);
 
     try {
-      const res = await chatService.send({
-        conversationId: conversationId.current,
-        message: text.trim(),
-      });
+      const res = await sendMessage({ conversationId: conversationId.current, message });
       conversationId.current = res.conversationId;
       setMessages((prev) => [...prev, res.reply]);
     } catch {
@@ -32,7 +29,7 @@ export function useChat() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }
 
   return { messages, loading, error, send };
 }

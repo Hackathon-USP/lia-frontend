@@ -11,7 +11,7 @@ export default function App({ Component, pageProps }: AppProps) {
     <div className={`${geist.variable} antialiased`}>
       <Head>
         <title>LIA</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
       </Head>
       <Layout>
         <Component {...pageProps} />

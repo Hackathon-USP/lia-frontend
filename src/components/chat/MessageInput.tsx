@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { MAX_MESSAGE_LENGTH } from "@/lib/domain/message";
+import { MAX_MESSAGE_LENGTH } from "@/services";
 
 export function MessageInput({ onSend, disabled }: { onSend: (text: string) => void; disabled: boolean }) {
   const [text, setText] = useState("");
@@ -12,22 +12,25 @@ export function MessageInput({ onSend, disabled }: { onSend: (text: string) => v
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex gap-2">
+    <form onSubmit={handleSubmit} className="flex shrink-0 gap-2">
       <label htmlFor="chat-input" className="sr-only">
         Mensagem para a LIA
       </label>
+      {/* text-base (16px) evita o zoom automático do iOS ao focar */}
       <input
         id="chat-input"
         value={text}
         onChange={(e) => setText(e.target.value)}
         maxLength={MAX_MESSAGE_LENGTH}
         placeholder="Escreva sua mensagem…"
-        className="flex-1 rounded-xl border border-black/15 bg-transparent px-4 py-2 dark:border-white/20"
+        autoComplete="off"
+        enterKeyHint="send"
+        className="min-h-12 min-w-0 flex-1 rounded-xl border border-black/15 bg-transparent px-4 text-base dark:border-white/20"
       />
       <button
         type="submit"
         disabled={disabled}
-        className="rounded-xl bg-blue-600 px-4 py-2 font-medium text-white disabled:opacity-50"
+        className="min-h-12 shrink-0 rounded-xl bg-blue-600 px-4 font-medium text-white disabled:opacity-50 sm:px-6"
       >
         Enviar
       </button>
