@@ -9,6 +9,18 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
+  --font-atkinson: var(--font-atkinson-hyperlegible);
+}
+
+/* Paleta da LIA (landing /sobre). Combinações de texto testadas para contraste AA. */
+@theme {
+  --color-petroleo: #0b6e5f;
+  --color-petroleo-escuro: #08584c;
+  --color-tinta: #10201c;
+  --color-tinta-suave: #3d4d48;
+  --color-creme: #f7f6f2;
+  --color-ambar: #f2b33d;
+  --color-menta: #e1efeb;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -22,4 +34,37 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+/* ---------- Landing /sobre ---------- */
+
+/* Rolagem suave só para quem não pediu menos movimento. */
+@media (prefers-reduced-motion: no-preference) {
+  html:has(.lia-page) {
+    scroll-behavior: smooth;
+  }
+}
+
+/* A página tem paleta clara própria, inclusive em modo escuro do sistema. */
+body:has(.lia-page) {
+  background: var(--color-creme);
+  color: var(--color-tinta);
+}
+
+/* Foco sempre visível: tinta sobre fundos claros, âmbar sobre o verde-petróleo. */
+.lia-page :focus-visible {
+  outline: 3px solid var(--color-tinta);
+  outline-offset: 3px;
+}
+.lia-page .on-dark :focus-visible {
+  outline-color: var(--color-ambar);
+}
+/* O <main> recebe foco pelo link "Pular para o conteúdo"; não precisa de contorno gigante. */
+.lia-page main:focus-visible {
+  outline: none;
+}
+
+/* Âncoras não ficam escondidas atrás do cabeçalho fixo. */
+.lia-page section[id] {
+  scroll-margin-top: 6rem;
 }
