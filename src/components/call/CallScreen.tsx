@@ -13,6 +13,7 @@ import { liaStatusLabel } from "./liaStatus";
 import { PhraseBar } from "./PhraseBar";
 import { SignTrainer } from "./SignTrainer";
 import { TriagemPanel } from "./TriagemPanel";
+import { TurnoIndicador, turnoAtual } from "./TurnoIndicador";
 
 interface Props {
   modo?: ModoAcessibilidade;
@@ -101,7 +102,23 @@ export function CallScreen({ modo = "libras", active = true, onEnd }: Props) {
             listenError={ouvido.error}
             voiceBlocked={lia.voice.enabled && lia.voice.blocked}
           />
-          {!completed && <UserEcho interim={ouvido.interim} userCaption={input.userCaption} />}
+          {!completed && (
+            <div className="mx-auto w-full max-w-3xl space-y-2 px-4 sm:px-8">
+              <TurnoIndicador
+                turno={turnoAtual({
+                  liaFalando: lia.talking,
+                  pensando: triagem.carregando || triagem.pensando,
+                  interim: ouvido.interim,
+                  ouvindo: ouvido.listening,
+                  esperandoResposta: ["consentimento", "pergunta", "identificacao"].includes(triagem.fase),
+                })}
+                interim={ouvido.interim}
+                libras={libras}
+                podeInterromper={ouvido.listening}
+              />
+              <UserEcho userCaption={input.userCaption} />
+            </div>
+          )}
           <TriagemPanel
             key={triagem.fase}
             libras={libras}

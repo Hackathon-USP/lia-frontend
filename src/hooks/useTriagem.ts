@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { clearSavedSession, readSavedSession, RESTART_AFTER_END_MS, saveSession } from "@/config/totem";
 import { cpfDigitos, cpfValido, formatarCpf } from "@/lib/triagem/cpf";
-import { interpretarIdentificacao } from "@/lib/triagem/identificacao";
+import { interpretarIdentificacao, mascararNumeros } from "@/lib/triagem/identificacao";
 import { interpretarEntrada, simOuNao } from "@/lib/triagem/interpretar";
 import {
   acordarBack,
@@ -10,10 +10,21 @@ import {
   finalizarAtendimento,
   identificarPaciente,
   iniciarAtendimento,
+  conversar,
   mensagemDeErro,
   responder,
 } from "@/services";
-import { ApiError, type Atendimento, type Finalizacao, type ModoAcessibilidade, type Pergunta, type TextosTotem } from "@/types";
+import {
+  ApiError,
+  type Atendimento,
+  type FaseConversa,
+  type Finalizacao,
+  type ModoAcessibilidade,
+  type Pergunta,
+  type RespostaConversa,
+  type TextosTotem,
+  type TurnoConversa,
+} from "@/types";
 
 /*
  * Fluxo da tela do paciente no back da LIA:
@@ -63,6 +74,13 @@ export interface RascunhoIdentificacao {
 }
 const RASCUNHO_VAZIO: RascunhoIdentificacao = { nome: "", cpf: "" };
 
+/** Quantas falas recentes vão de contexto para a IA. */
+const HISTORICO_MAX = 8;
+
+const cpfCompleto = (c: string) => cpfDigitos(c).length === 11;
+/** O que falta na identificação, dito pela LIA. */
+const proximoPasso = (nome: string, cpf: string) => (!nome ? IDENT.pedirNome : !cpfCompleto(cpf) ? IDENT.pedirCpf : IDENT.confirmar);
+
 export interface UseTriagemOptions {
   /** Faz a LIA sinalizar (e legendar) um texto. */
   falar: (texto: string) => void;
@@ -83,6 +101,10 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
   /** Nome e CPF sendo preenchidos (por toque, voz ou Libras) */
   const [rascunho, setRascunho] = useState<RascunhoIdentificacao>(RASCUNHO_VAZIO);
   const rascunhoRef = useRef<RascunhoIdentificacao>(RASCUNHO_VAZIO);
+  /** A IA está pensando numa frase livre do paciente */
+  const [pensando, setPensando] = useState(false);
+  /** Últimas falas (LIA e paciente), contexto para a IA. Nunca guarda o CPF. */
+  const historico = useRef<TurnoConversa[]>([]);
 
   const falarRef = useRef(falar);
   const textosRef = useRef<TextosTotem>(TEXTOS_PADRAO);
@@ -101,8 +123,18 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
     identificar: (nome: string, cpf: string) => Promise<void>;
   } | null>(null);
 
+  const registrar = useCallback((quem: TurnoConversa["quem"], texto: string) => {
+    // Na identificação os números são o CPF: não entram no histórico.
+    const seguro = faseRef.current === "identificacao" ? mascararNumeros(texto) : texto;
+    historico.current = [...historico.current, { quem, texto: seguro.slice(0, 500) }].slice(-HISTORICO_MAX);
+  }, []);
+
+  // Tudo o que a LIA diz entra no histórico da conversa.
   useEffect(() => {
-    falarRef.current = falar;
+    falarRef.current = (texto: string) => {
+      registrar("lia", texto);
+      falar(texto);
+    };
   });
 
   const mudarFase = useCallback((f: FaseTriagem) => {
@@ -233,27 +265,71 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
     [chamar, finalizar, recusarIdentificacao],
   );
 
+  /** Muda a cada frase do paciente: a resposta da IA para uma frase antiga é descartada. */
+  const conversaVersao = useRef(0);
+
+  /**
+   * Pergunta à IA o que o paciente quis dizer, quando as regras locais não entenderam.
+   * `resposta` null = sem IA (não configurada ou falhou); `valida` false = chegou atrasada, ignorar.
+   */
+  const perguntarIA = useCallback(
+    async (frase: string, canal: ModoAcessibilidade, fase: FaseConversa): Promise<{ resposta: RespostaConversa | null; valida: boolean }> => {
+      const versao = conversaVersao.current;
+      const g = generation.current;
+      const p = perguntaRef.current;
+      setPensando(true);
+      try {
+        const resposta = await conversar({
+          fase,
+          modo,
+          canal,
+          // Na identificação, nenhum número sai do totem.
+          frase: fase === "identificacao" ? mascararNumeros(frase) : frase,
+          pergunta:
+            fase === "pergunta" && p
+              ? { texto: p.texto, tipo: p.tipo, opcoes: p.opcoes.map((o) => ({ id: o.id, rotulo: o.rotulo })), minimo: p.minimo, maximo: p.maximo }
+              : undefined,
+          historico: historico.current.slice(0, -1), // a última fala é a própria frase
+        });
+        const valida = versao === conversaVersao.current && g === generation.current && faseRef.current === fase;
+        return { resposta, valida };
+      } finally {
+        if (versao === conversaVersao.current) setPensando(false);
+      }
+    },
+    [modo],
+  );
+
+  /** Põe o nome no formulário e a LIA confirma. */
+  const anotarNome = useCallback(
+    (nome: string) => {
+      mudarRascunho({ nome });
+      falarRef.current(`${IDENT.nomeAnotado(nome)} ${proximoPasso(nome, rascunhoRef.current.cpf)}`);
+    },
+    [mudarRascunho],
+  );
+
   /**
    * Nome ou CPF dito no microfone, sinalizado em Libras (nome soletrado) ou digitado no campo livre.
    * Preenche o formulário e a LIA confirma o que anotou e diz o próximo passo.
+   * O que as regras não entendem (fora o CPF, que nunca vai para a IA) a IA interpreta.
    */
   const ditarIdentificacao = useCallback(
-    async (frase: string) => {
+    async (frase: string, canal: ModoAcessibilidade) => {
       const e = interpretarIdentificacao(frase);
       const { nome, cpf } = rascunhoRef.current;
-      const cpfCompleto = (c: string) => cpfDigitos(c).length === 11;
-      const proximo = (n: string, c: string) => (!n ? IDENT.pedirNome : !cpfCompleto(c) ? IDENT.pedirCpf : IDENT.confirmar);
       setErroIdentificacao(null);
 
-      if (!e) {
-        falarRef.current(textosRef.current.repetir);
-        return;
+      if (!e || e.tipo === "ajuda") {
+        const { resposta, valida } = await perguntarIA(frase, canal, "identificacao");
+        if (!valida) return;
+        if (resposta?.acao === "nome" && resposta.nome) return anotarNome(resposta.nome);
+        if (resposta?.fala) return falarRef.current(resposta.fala);
+        // Sem IA: respostas prontas.
+        if (e?.tipo === "ajuda") return falarRef.current(e.campo === "cpf" ? IDENT.pedirCpf : IDENT.podeFalarNome);
+        return falarRef.current(textosRef.current.repetir);
       }
-      if (e.tipo === "nome") {
-        mudarRascunho({ nome: e.nome });
-        falarRef.current(`${IDENT.nomeAnotado(e.nome)} ${proximo(e.nome, cpf)}`);
-        return;
-      }
+      if (e.tipo === "nome") return anotarNome(e.nome);
       if (e.tipo === "cpf") {
         // Ditado em partes: completa o que já tem; se já estava completo, recomeça.
         const atual = cpfCompleto(cpf) ? "" : cpfDigitos(cpf);
@@ -261,11 +337,7 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
         mudarRascunho({ cpf: novo });
         if (novo.length < 11) falarRef.current(IDENT.faltamNumeros(11 - novo.length));
         else if (!cpfValido(novo)) recusarIdentificacao(IDENT.cpfInvalido);
-        else falarRef.current(`${IDENT.cpfAnotado} ${proximo(nome, novo)}`);
-        return;
-      }
-      if (e.tipo === "ajuda") {
-        falarRef.current(e.campo === "cpf" ? IDENT.pedirCpf : IDENT.podeFalarNome);
+        else falarRef.current(`${IDENT.cpfAnotado} ${proximoPasso(nome, novo)}`);
         return;
       }
       if (e.tipo === "apagar") {
@@ -276,12 +348,12 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
       }
       // Confirmar
       if (!nome || !cpfCompleto(cpf)) {
-        falarRef.current(proximo(nome, cpf));
+        falarRef.current(proximoPasso(nome, cpf));
         return;
       }
       await identificar(nome, cpf);
     },
-    [identificar, mudarRascunho, recusarIdentificacao],
+    [anotarNome, identificar, mudarRascunho, perguntarIA, recusarIdentificacao],
   );
 
   const comecar = useCallback(async () => {
@@ -343,26 +415,45 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
     [aplicar, chamar],
   );
 
-  /** Entrada livre: frase sinalizada em Libras, falada no microfone ou digitada. */
+  /**
+   * Entrada livre: frase sinalizada em Libras, falada no microfone ou digitada.
+   * Primeiro as regras locais (rápidas, nada sai do totem); o que elas não entendem vai para a IA,
+   * que responde como numa conversa (explica, tira dúvida, pede para escolher) ou já registra a resposta.
+   */
   const entrada = useCallback(
     async (frase: string, canal: ModoAcessibilidade) => {
       const texto = frase.trim();
       if (!texto) return;
-      if (faseRef.current === "consentimento") {
+      conversaVersao.current += 1;
+      registrar("paciente", texto);
+      const fase = faseRef.current;
+
+      if (fase === "identificacao") return ditarIdentificacao(texto, canal);
+
+      if (fase === "consentimento") {
         const r = simOuNao(texto);
-        if (r) await consentir(r === "sim");
-        else falarRef.current(textosRef.current.repetir);
-        return;
+        if (r) return consentir(r === "sim");
+        const { resposta, valida } = await perguntarIA(texto, canal, "consentimento");
+        if (!valida) return;
+        if (resposta?.acao === "consentir" || resposta?.acao === "recusar") return consentir(resposta.acao === "consentir");
+        return falarRef.current(resposta?.fala || textosRef.current.repetir);
       }
-      if (faseRef.current === "identificacao") {
-        await ditarIdentificacao(texto);
-        return;
-      }
+
       const p = perguntaRef.current;
-      if (faseRef.current !== "pergunta" || !p) return;
-      await responderPergunta(interpretarEntrada(p, texto, canal), canal);
+      if (fase !== "pergunta" || !p) return;
+      const local = interpretarEntrada(p, texto, canal);
+      if (local !== null) return responderPergunta(local, canal);
+
+      const { resposta, valida } = await perguntarIA(texto, canal, "pergunta");
+      if (!valida) return;
+      if (resposta?.acao === "responder" && resposta.valor !== null) {
+        return responderPergunta(p.tipo === "escala" ? Number(resposta.valor) : resposta.valor, canal);
+      }
+      if (resposta?.fala) return falarRef.current(resposta.fala);
+      // Sem IA: manda a frase como está e o back decide (ou pede para repetir).
+      return responderPergunta(texto, canal);
     },
-    [consentir, ditarIdentificacao, responderPergunta],
+    [consentir, ditarIdentificacao, perguntarIA, registrar, responderPergunta],
   );
 
   useEffect(() => {
@@ -378,6 +469,9 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
 
   const limpar = useCallback(() => {
     generation.current += 1;
+    conversaVersao.current += 1;
+    historico.current = [];
+    setPensando(false);
     ocupado.current = false;
     ultimaAcao.current = null;
     atendimentoRef.current = null;
@@ -421,6 +515,8 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
     erroIdentificacao,
     rascunho,
     mudarRascunho,
+    /** A IA está entendendo uma frase livre do paciente */
+    pensando,
     identificar,
     limpar,
     pergunta,

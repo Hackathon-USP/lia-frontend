@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { markActivity } from "@/config/totem";
+import { contarPalavras, ehEco } from "@/lib/conversa/eco";
 import type { ModoAcessibilidade } from "@/types";
 import type { LiaPresenter } from "./useLiaPresenter";
 import { useListening } from "./useListening";
@@ -14,6 +15,11 @@ import { useSignRecognition } from "./useSignRecognition";
  * Todas as regras de "quando ignorar" ficam em enviar(): fora do atendimento, durante o treino
  * de sinais ou (para a Libras) enquanto o back ainda responde a frase anterior.
  */
+
+/** Depois que a LIA para de falar, o fim da voz dela ainda pode chegar pelo microfone. */
+const ECO_JANELA_MS = 1500;
+/** Palavras ouvidas (que não são eco) para a LIA parar de falar. */
+const PALAVRAS_PARA_INTERROMPER = 2;
 
 export interface PatientInputOptions {
   /** Atendimento em andamento (tela visível) */
@@ -57,11 +63,39 @@ export function usePatientInput({ active, training, busy, dictating = false, cam
     onCommand(command, canal);
   }
 
-  // A LIA ouvindo pelo microfone. Pausa enquanto ela fala, para não ouvir a própria voz.
+  /*
+   * Microfone sempre aberto, inclusive com a LIA falando: o paciente pode interromper.
+   * O que o microfone pega da própria voz da LIA (eco) é descartado.
+   */
+  const { talking } = lia;
+  const fimDaFala = useRef(0);
+  useEffect(() => {
+    if (!talking) fimDaFala.current = Date.now();
+  }, [talking]);
+
+  function eco(text: string) {
+    const { text: legenda, isTranslation } = lia.caption;
+    if (isTranslation || !lia.voice.enabled) return false; // sem voz dela, não há eco
+    const recente = talking || Date.now() - fimDaFala.current < ECO_JANELA_MS;
+    return recente && ehEco(text, legenda);
+  }
+
   const ouvido = useListening({
-    paused: !active || lia.voice.speaking,
-    onFinal: (text) => enviar(text, "voz"),
+    paused: !active,
+    onFinal: (text) => {
+      if (eco(text)) return;
+      if (talking) lia.interromper();
+      enviar(text, "voz");
+    },
   });
+
+  // O paciente começou a falar por cima: a LIA para e escuta (sem esperar o fim da frase).
+  const { interim } = ouvido;
+  const { interromper } = lia;
+  useEffect(() => {
+    if (talking && contarPalavras(interim) >= PALAVRAS_PARA_INTERROMPER && !eco(interim)) interromper();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- eco() lê a legenda atual; só reage ao que é ouvido
+  }, [interim, talking, interromper]);
 
   const signs = useSignRecognition({
     videoRef: camera.videoRef,

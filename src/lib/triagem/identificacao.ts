@@ -65,6 +65,17 @@ export function digitosDaFrase(frase: string) {
     .join("");
 }
 
+/**
+ * Troca números (em algarismos ou por extenso) por "#": o que a LIA guarda no histórico
+ * ou manda para a IA nunca leva o CPF. "meu cpf é cinco dois 9" → "meu cpf é # # #"
+ */
+export function mascararNumeros(frase: string) {
+  return frase
+    .split(/(\s+)/)
+    .map((p) => (/\d/.test(p) ? p.replace(/\d/g, "#") : normalizarSinal(p) in DIGITOS ? "#" : p))
+    .join("");
+}
+
 /** "pedro DA silva" → "Pedro da Silva" */
 export function formatarNome(nome: string) {
   return palavras(nome)
