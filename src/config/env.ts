@@ -22,4 +22,11 @@ export const env = {
   vlibrasTranslateUrl: process.env.NEXT_PUBLIC_VLIBRAS_TRANSLATE_URL ?? "https://traducao2.vlibras.gov.br/translate",
   /** Dicionário de sinais usado pelo player */
   vlibrasDictionaryUrl: "https://dicionario2.vlibras.gov.br/2018.3.1/WEBGL/",
+  /**
+   * Mesmo dicionário, sem contar estatística de uso. O treino (/treinar) toca centenas de sinais
+   * e não deve inflar as estatísticas do VLibras. Os sinais ficam em <url><região>/<GLOSA>.
+   */
+  vlibrasDictionaryStaticUrl: "https://dicionario2.vlibras.gov.br/static/BUNDLES/2018.3.1/WEBGL/",
+  /** Região dos sinais no dicionário do VLibras (BR = nacional) */
+  vlibrasRegion: "BR",
 } as const;

@@ -16,6 +16,7 @@ import {
   type LiaVision,
   type RecognitionMode,
 } from "@/lib/libras";
+import { baixarAmostras } from "@/services/libras.service";
 
 /*
  * Libras → português, com o motor do lia-vision (src/lib/libras):
@@ -25,6 +26,8 @@ import {
  *    inteiro com os exemplos gravados; acima do limiar, vira palavra.
  * 4. No modo datilologia, cada letra conta quando a mão fica parada; "Confirmar palavra" junta as letras.
  * 5. Mãos abaixadas por 2,5 s fecham a frase, que vai para onPhrase (que manda para o back).
+ * Os exemplos vêm das gravações feitas aqui e dos gerados com o avatar do VLibras (página /treinar),
+ * que o totem baixa do back ao carregar o reconhecimento.
  */
 
 const AUTO_SEND_MS = 2500; // mãos abaixadas por esse tempo = frase terminada
@@ -35,6 +38,10 @@ const MISS_SHOW_MS = 2000;
 const SIGNS_KEY = "lia:sinais:lista:v2";
 const SIGNER_KEY = "lia:sinalizante";
 const OLD_DATA_KEY = "lia:sinais:v1"; // formato da versão anterior (vetores prontos, sem o tronco)
+/** Até onde já baixamos as amostras do back (cursor de GET /libras/amostras). */
+const SERVER_CURSOR_KEY = "lia:sinais:servidor:cursor";
+/** Usar os exemplos do avatar do VLibras no reconhecimento (padrão: sim). */
+const USE_VLIBRAS_KEY = "lia:sinais:usar-vlibras";
 
 const ALPHABET = parseAlphabet(alphabetFile);
 const DEFAULT_SIGNS = glossesOf(parseVocabulary(vocabFile));
@@ -56,8 +63,10 @@ export interface Prediction {
 
 export interface VocabItem {
   label: string;
-  /** Gravações deste sinal neste navegador. */
+  /** Gravações deste sinal neste navegador (sem contar as do VLibras). */
   count: number;
+  /** Exemplos gerados com o avatar do VLibras. */
+  vlibras?: number;
   /** Letra com movimento (J, Z, Ç). */
   movimento?: boolean;
 }
@@ -119,6 +128,11 @@ function writeJSON(key: string, value: unknown) {
   }
 }
 
+/** Sinais que o totem reconhece neste navegador (o vocabulário mais os que a equipe acrescentou). */
+export function savedSignList(): string[] {
+  return readJSON(SIGNS_KEY, DEFAULT_SIGNS);
+}
+
 /** Apelido deste aparelho nas gravações (serve para a avaliação por pessoa na bancada). */
 function loadSigner(): string {
   const saved = readJSON<string | null>(SIGNER_KEY, null);
@@ -176,6 +190,9 @@ export function useSignRecognition({ videoRef, overlayRef, enabled, onPhrase }: 
   const [missed, setMissed] = useState(false);
   const [recording, setRecording] = useState<RecordingState | null>(null);
   const [counts, setCounts] = useState<Record<string, number>>({});
+  const [vlibrasCounts, setVlibrasCounts] = useState<Record<string, number>>({});
+  const [vlibrasEnabled, setVlibrasEnabledState] = useState(() => readJSON(USE_VLIBRAS_KEY, true));
+  const vlibrasEnabledRef = useRef(vlibrasEnabled);
   const [signList, setSignList] = useState<string[]>(() => readJSON(SIGNS_KEY, DEFAULT_SIGNS));
   const [hasTrainedSigns, setHasTrainedSigns] = useState(false);
   const [hadOldData] = useState(() => readJSON<unknown>(OLD_DATA_KEY, null) !== null);
@@ -194,15 +211,38 @@ export function useSignRecognition({ videoRef, overlayRef, enabled, onPhrase }: 
   const refreshModel = useCallback(async (l: LiaVision) => {
     const stats = await l.dataset.stats();
     const byGloss = Object.fromEntries(Object.entries(stats.byGloss).map(([g, b]) => [g, b.total]));
-    setCounts(byGloss);
+    const vl = Object.fromEntries(Object.entries(stats.byGloss).map(([g, b]) => [g, b.bySource.vlibras ?? 0]));
+    setCounts(Object.fromEntries(Object.entries(byGloss).map(([g, n]) => [g, n - (vl[g] ?? 0)])));
+    setVlibrasCounts(vl);
     // Sinais que chegaram por importação entram na lista.
     setSignList((list) => {
       const extra = Object.keys(byGloss).filter((g) => !isLetterGloss(g) && !list.includes(g));
       return extra.length ? [...list, ...extra] : list;
     });
-    await l.loadModel();
+    if (vlibrasEnabledRef.current) await l.loadModel();
+    else await l.loadModel({ samples: (await l.dataset.export()).samples.filter((x) => x.source !== "vlibras") });
     setHasTrainedSigns((l.model?.templates ?? 0) > 0 || !!l.letterModel);
   }, []);
+
+  /**
+   * Baixa do back as amostras novas (as geradas com o VLibras em /treinar). `full` baixa tudo de
+   * novo (as que já existem são puladas pelo id).
+   */
+  const syncFromServer = useCallback(
+    async (l: LiaVision, full = false) => {
+      let added = 0;
+      let skipped = 0;
+      const cursor = await baixarAmostras(full ? 0 : readJSON<number>(SERVER_CURSOR_KEY, 0), async (page) => {
+        const r = await l.dataset.import(page, { merge: true });
+        added += r.added;
+        skipped += r.skipped;
+      });
+      writeJSON(SERVER_CURSOR_KEY, cursor);
+      if (added) await refreshModel(l);
+      return { added, skipped };
+    },
+    [refreshModel],
+  );
 
   // 1. Carrega o motor quando a câmera liga pela primeira vez (e os modelos das gravações salvas).
   useEffect(() => {
@@ -213,12 +253,14 @@ export function useSignRecognition({ videoRef, overlayRef, enabled, onPhrase }: 
         if (cancelled) return;
         setLia(l);
         await refreshModel(l).catch((err) => console.warn("[lia] não consegui ler as gravações salvas", err));
+        // Em segundo plano: o back pode demorar para acordar e o totem já funciona com o que tem.
+        void syncFromServer(l).catch((err) => console.warn("[lia] não consegui baixar os exemplos do servidor", err));
       })
       .catch(() => !cancelled && setFailed(true));
     return () => {
       cancelled = true;
     };
-  }, [enabled, lia, refreshModel]);
+  }, [enabled, lia, refreshModel, syncFromServer]);
 
   const sendPhrase = useCallback(() => {
     if (!lia) return;
@@ -386,7 +428,26 @@ export function useSignRecognition({ videoRef, overlayRef, enabled, onPhrase }: 
     [lia, refreshModel],
   );
 
-  const vocab = useMemo<VocabItem[]>(() => signList.map((label) => ({ label, count: counts[label] ?? 0 })), [signList, counts]);
+  /** Liga/desliga os exemplos do avatar do VLibras no reconhecimento. */
+  const setVlibrasEnabled = useCallback(
+    async (on: boolean) => {
+      vlibrasEnabledRef.current = on;
+      setVlibrasEnabledState(on);
+      writeJSON(USE_VLIBRAS_KEY, on);
+      if (lia) await refreshModel(lia);
+    },
+    [lia, refreshModel],
+  );
+
+  const downloadFromServer = useCallback(async () => {
+    if (!lia) throw new Error("A leitura das mãos ainda não carregou.");
+    return syncFromServer(lia, true);
+  }, [lia, syncFromServer]);
+
+  const vocab = useMemo<VocabItem[]>(
+    () => signList.map((label) => ({ label, count: counts[label] ?? 0, vlibras: vlibrasCounts[label] ?? 0 })),
+    [signList, counts, vlibrasCounts],
+  );
   const alphabetVocab = useMemo<VocabItem[]>(
     () => ALPHABET.map((a) => ({ label: a.letra, count: counts[a.letra] ?? 0, movimento: a.movimento })),
     [counts],
@@ -425,5 +486,9 @@ export function useSignRecognition({ videoRef, overlayRef, enabled, onPhrase }: 
     exportData,
     importData,
     hadOldData,
+    // exemplos do avatar do VLibras
+    vlibrasEnabled,
+    setVlibrasEnabled,
+    downloadFromServer,
   };
 }

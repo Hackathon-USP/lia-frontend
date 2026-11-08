@@ -1,9 +1,9 @@
 import type { RAW_FORMAT } from '../raw-frame';
 
-/** De onde veio a amostra. */
-export type SampleSource = 'proprio' | 'v-librasil' | 'minds';
+/** De onde veio a amostra. `vlibras` = gerada com o avatar do VLibras (página /treinar). */
+export type SampleSource = 'proprio' | 'v-librasil' | 'minds' | 'vlibras';
 
-export const SAMPLE_SOURCES: readonly SampleSource[] = ['proprio', 'v-librasil', 'minds'];
+export const SAMPLE_SOURCES: readonly SampleSource[] = ['proprio', 'v-librasil', 'minds', 'vlibras'];
 
 /** Indicadores calculados a partir dos quadros (nunca confiamos no que vem de fora). */
 export interface SampleQuality {

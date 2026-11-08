@@ -25,6 +25,13 @@ export const API_ROUTES = {
   senhas: {
     consultar: (codigo: string) => `/senhas/${codigo}`,
   },
+  /** Amostras para treinar o reconhecimento de Libras (geradas com o avatar do VLibras em /treinar). */
+  libras: {
+    /** POST {amostras} (até 100) · GET ?fonte=&glosa=&depois_de=&limite= · DELETE ?fonte=&glosa= */
+    amostras: "/libras/amostras",
+    /** GET ?fonte= — quantas amostras há por glosa, fonte e sinalizante */
+    resumo: "/libras/amostras/resumo",
+  },
   /** Tela do guichê. Sem autenticação ainda: não divulgar a URL da tela. */
   recepcao: {
     /** GET ?status=&data= — senhas do dia, já na ordem de chamada */

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import type { ImportReport } from "@/lib/libras";
+import { ROUTES } from "@/routes";
 import type { RecordingState, RecordResult, VocabItem } from "@/hooks/useSignRecognition";
 import type { PipSide } from "./CameraPip";
 
@@ -24,6 +25,11 @@ interface Props {
   importData: (json: string) => Promise<ImportReport>;
   /** Havia sinais gravados na versão anterior do reconhecimento (não servem mais). */
   hadOldData: boolean;
+  /** Usar os exemplos gerados com o avatar do VLibras (página /treinar). */
+  vlibrasEnabled: boolean;
+  setVlibrasEnabled: (on: boolean) => Promise<void>;
+  /** Baixa do servidor os exemplos gerados com o VLibras. */
+  downloadFromServer: () => Promise<{ added: number; skipped: number }>;
 }
 
 const btn =
@@ -83,6 +89,16 @@ export function SignTrainer(props: Props) {
       URL.revokeObjectURL(url);
     } catch (err) {
       setMessage(`Não foi possível exportar: ${(err as Error)?.message ?? err}`);
+    }
+  }
+
+  async function handleDownload() {
+    setMessage("Baixando os exemplos do servidor…");
+    try {
+      const r = await props.downloadFromServer();
+      setMessage(r.added ? `Baixei ${r.added} exemplos do VLibras do servidor.` : "Não havia exemplos novos no servidor.");
+    } catch (err) {
+      setMessage(`Não consegui baixar do servidor: ${(err as Error)?.message ?? err}`);
     }
   }
 
@@ -172,7 +188,7 @@ export function SignTrainer(props: Props) {
         </p>
 
         <ul className="flex flex-col gap-2">
-          {items.map(({ label, count, movimento }) => (
+          {items.map(({ label, count, movimento, vlibras }) => (
             <li key={label} className="flex flex-wrap items-center gap-2 rounded-2xl bg-white/10 p-3">
               <div className="min-w-0 flex-1">
                 <p className="font-bold">
@@ -181,6 +197,7 @@ export function SignTrainer(props: Props) {
                 </p>
                 <p className={`text-sm ${count >= GOOD_ENOUGH ? "text-emerald-300" : count ? "text-ambar" : "text-white/75"}`}>
                   {count ? `${count} ${count === 1 ? "gravação" : "gravações"}${count < GOOD_ENOUGH ? " (grave mais)" : ""}` : "não gravado"}
+                  {vlibras ? <span className="text-white/75"> · {vlibras} do VLibras{props.vlibrasEnabled ? "" : " (desligados)"}</span> : null}
                 </p>
               </div>
               <button
@@ -222,6 +239,34 @@ export function SignTrainer(props: Props) {
               Adicionar
             </button>
           </form>
+        )}
+
+        {set === "sinais" && (
+          <div className="flex flex-col gap-3 border-t border-white/15 pt-4">
+            <h3 className="font-bold">Exemplos do avatar do VLibras</h3>
+            <label className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                checked={props.vlibrasEnabled}
+                onChange={(e) => void props.setVlibrasEnabled(e.target.checked)}
+                disabled={busy}
+                className="size-5 accent-ambar"
+              />
+              Usar os exemplos do VLibras no reconhecimento
+            </label>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => void handleDownload()} disabled={busy} className={`${btn} bg-white/15 hover:bg-white/25`}>
+                Baixar do servidor
+              </button>
+              <a href={ROUTES.treinar} target="_blank" rel="noreferrer" className={`${btn} bg-white/15 hover:bg-white/25`}>
+                Gerar exemplos com o avatar<span className="sr-only"> (abre em outra aba)</span>
+              </a>
+            </div>
+            <p className="text-sm text-white/75">
+              O avatar do VLibras sinaliza cada glosa e a LIA aprende com ele, sem precisar gravar ninguém. O totem baixa
+              os exemplos do servidor sozinho ao abrir; gravações de pessoas continuam ajudando a reconhecer gente de verdade.
+            </p>
+          </div>
         )}
 
         <div className="flex flex-wrap gap-2 border-t border-white/15 pt-4">
