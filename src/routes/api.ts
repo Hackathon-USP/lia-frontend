@@ -23,9 +23,4 @@ export const API_ROUTES = {
   senhas: {
     consultar: (codigo: string) => `/senhas/${codigo}`,
   },
-  /** Rotas do chat livre (protótipo antigo, não existem no back atual) */
-  chat: {
-    send: "/chat",
-    history: (conversationId: string) => `/chat/${conversationId}`,
-  },
 } as const;

@@ -1,10 +1,11 @@
 import { useState } from "react";
+import { RESTART_AFTER_END_MS } from "@/config/totem";
 import type { FaseTriagem } from "@/hooks/useTriagem";
 import type { Finalizacao, Pergunta } from "@/types";
 import { ResetCountdown } from "./ResetCountdown";
+import { optionButton, primaryButton } from "./styles";
 
-const optionButton = "min-h-16 rounded-2xl border-2 border-transparent bg-white px-5 py-4 text-xl font-bold text-tinta shadow-sm hover:bg-menta focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-ambar disabled:opacity-50";
-const primaryButton = `${optionButton} !bg-ambar !text-tinta`;
+const RESTART_SECONDS = RESTART_AFTER_END_MS / 1000;
 
 interface Props {
   fase: FaseTriagem;
@@ -77,13 +78,13 @@ export function TriagemPanel({ fase, pergunta, finalizacao, carregando, libras, 
             <p className="mt-6 text-xl leading-relaxed">Aguarde sua senha ser chamada. Se precisar de orientação sobre onde aguardar, procure a recepção.</p>
           </div>
           <button type="button" onClick={onRecomecar} className={`${primaryButton} w-full`}>Concluir</button>
-          <p className="text-lg">Retorno à tela inicial em <ResetCountdown seconds={60} />.</p>
+          <p className="text-lg">Retorno à tela inicial em <ResetCountdown seconds={RESTART_SECONDS} />.</p>
         </div>}
         {fase === "recusado" && <div className="space-y-6 text-center">
           <h2 className="text-3xl font-bold">A recepção pode ajudar você</h2>
           <p className="text-xl leading-relaxed">Procure a equipe da unidade para continuar seu atendimento pessoalmente.</p>
           <button type="button" onClick={onRecomecar} className={`${primaryButton} w-full`}>Voltar ao início</button>
-          <p className="text-lg">Retorno à tela inicial em <ResetCountdown seconds={60} />.</p>
+          <p className="text-lg">Retorno à tela inicial em <ResetCountdown seconds={RESTART_SECONDS} />.</p>
         </div>}
       </div>
     </section>

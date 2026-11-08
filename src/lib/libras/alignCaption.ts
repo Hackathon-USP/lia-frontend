@@ -105,3 +105,20 @@ export function alignGlossToWords(words: string[], gloss: string[]): (WordRange 
   }
   return out;
 }
+
+/**
+ * Posição (0, 1, 2…) da palavra da legenda que a voz está falando agora.
+ * `spoken` é o trecho entregue à voz (uma parte da legenda) e `char` o início
+ * da palavra dentro dele. Devolve null se o trecho não estiver na legenda.
+ */
+export function wordIndexAt(caption: string, spoken: string, char: number): number | null {
+  const base = caption.indexOf(spoken);
+  if (base < 0) return null;
+  const abs = base + char;
+  let index = -1;
+  for (const m of caption.matchAll(/\S+/g)) {
+    if ((m.index ?? 0) > abs) break;
+    index++;
+  }
+  return index >= 0 ? index : null;
+}

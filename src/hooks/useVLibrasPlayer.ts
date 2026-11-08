@@ -5,6 +5,8 @@ export type VLibrasAvatar = "hosana" | "icaro" | "guga";
 
 const PLAYER_ORIGIN = new URL(env.vlibrasUrl).origin;
 export const VLIBRAS_PLAYER_SRC = `${env.vlibrasUrl}/unity/index.html?v=${env.vlibrasPlayerVersion}`;
+/** Tempo para o avatar e a personalização se acomodarem antes da primeira frase. */
+const AVATAR_SETTLE_MS = 2600;
 
 /**
  * Controla o player Unity do VLibras embutido num <iframe ref={iframeRef}>.
@@ -20,7 +22,11 @@ export function useVLibrasPlayer(avatar: VLibrasAvatar = "hosana") {
   const [failed, setFailed] = useState(false);
   /** Posição (0, 1, 2…) do sinal da glosa que o avatar está fazendo agora; -1 = parado */
   const [glossIndex, setGlossIndex] = useState(-1);
+  /** Recebeu a frase mas ainda está baixando os sinais (na 1ª vez leva alguns segundos). */
+  const [preparing, setPreparing] = useState(false);
   const pendingGloss = useRef<string | null>(null);
+  /** Última frase enviada (para repetir se algo interromper). */
+  const lastGloss = useRef<string | null>(null);
 
   const send = useCallback((object: string, method: string, params?: string | number) => {
     iframeRef.current?.contentWindow?.postMessage({ type: "unity", object, method, params }, PLAYER_ORIGIN);
@@ -29,6 +35,7 @@ export function useVLibrasPlayer(avatar: VLibrasAvatar = "hosana") {
   const play = useCallback(
     (gloss: string) => {
       setGlossIndex(-1);
+      lastGloss.current = gloss;
       if (!ready) {
         pendingGloss.current = gloss; // toca assim que o player terminar de carregar
         return;
@@ -67,34 +74,36 @@ export function useVLibrasPlayer(avatar: VLibrasAvatar = "hosana") {
           }
           // Sem a legenda em glosa ("OLÁ QUAL SEU QUEIXA"): a tela já mostra a frase em português.
           send("PlayerManager", "setSubtitlesState", 0);
-          // O widget oficial espera ~500 ms antes de trocar o avatar.
-          timers.push(
-            setTimeout(() => {
-              send("PlayerManager", "Change", avatar);
-              setReady(true);
-            }, 500),
-          );
-          // A personalização é baixada e aplicada depois e pode voltar o avatar padrão (Ícaro):
-          // reforça o avatar da LIA quando ela termina.
-          for (const ms of [2000, 4000]) timers.push(setTimeout(() => send("PlayerManager", "Change", avatar), ms));
+          // O widget oficial espera ~500 ms antes de trocar o avatar. A personalização é aplicada
+          // depois e pode voltar o avatar padrão (Ícaro), então reforça mais uma vez.
+          // IMPORTANTE: trocar o avatar interrompe a sinalização, por isso tudo isso acontece
+          // ANTES de o player ficar "pronto" (antes da primeira frase).
+          timers.push(setTimeout(() => send("PlayerManager", "Change", avatar), 500));
+          timers.push(setTimeout(() => send("PlayerManager", "Change", avatar), 2000));
+          timers.push(setTimeout(() => setReady(true), AVATAR_SETTLE_MS));
           break;
         case "get_avatar":
-          // O player avisou qual avatar está na tela; se não for o da LIA, troca.
+          // O player avisou qual avatar está na tela; se não for o da LIA, troca
+          // e repete a frase que a troca interrompeu.
           if (typeof e.data.data === "string" && !e.data.data.toLowerCase().startsWith(avatar.slice(0, 3))) {
             send("PlayerManager", "Change", avatar);
+            const last = lastGloss.current;
+            if (last) timers.push(setTimeout(() => send("PlayerManager", "playNow", last), 700));
           }
           break;
         case "on_playing_state_change": {
-          // [isPlaying, isPaused, ...] como strings "True"/"False"
-          const [isPlaying, isPaused] = (e.data.data as string[]).map((v) => v === "True");
+          // [isPlaying, isPaused, animação de intervalo, isLoading, isRepeatable] como "True"/"False"
+          const [isPlaying, isPaused, , isLoading] = (e.data.data as string[]).map((v) => v === "True");
           setPlaying(isPlaying && !isPaused);
+          setPreparing(isPlaying && isLoading);
           if (!isPlaying) setGlossIndex(-1);
           break;
         }
         case "counter_gloss": {
           // [sinal atual (a partir de 0), total de sinais]
-          const current = Number((e.data.data as (string | number)[])?.[0]);
+          const [current, total] = (e.data.data as (string | number)[]).map(Number);
           if (!Number.isNaN(current)) setGlossIndex(current);
+          if (total > 0 && current > 0) setPreparing(false); // já está sinalizando
           break;
         }
         case "on_error":
@@ -118,5 +127,5 @@ export function useVLibrasPlayer(avatar: VLibrasAvatar = "hosana") {
     }
   }, [ready, send]);
 
-  return { iframeRef, ready, loadProgress, playing, failed, glossIndex, play, stop };
+  return { iframeRef, ready, loadProgress, playing, preparing, failed, glossIndex, play, stop };
 }

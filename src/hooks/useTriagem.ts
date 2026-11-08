@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { clearSavedSession, readSavedSession, RESTART_AFTER_END_MS, saveSession } from "@/config/totem";
+import { interpretarEntrada, simOuNao } from "@/lib/triagem/interpretar";
 import {
   acordarBack,
   buscarTextos,
   consultarAtendimento,
-  escolherValor,
   finalizarAtendimento,
   iniciarAtendimento,
   mensagemDeErro,
   responder,
-  simOuNao,
 } from "@/services";
 import type { Atendimento, Finalizacao, ModoAcessibilidade, Pergunta, TextosTotem } from "@/types";
 
@@ -33,27 +33,8 @@ const TEXTOS_PADRAO: TextosTotem = {
   finalizado_preferencial: "Pronto! Sua senha é {senha}, de atendimento prioritário. Aguarde ser chamado.",
 };
 
-const SESSION_KEY = "lia:atendimento";
+/** A partir desse tempo esperando o back, avisa que está demorando. */
 const LENTO_MS = 4000;
-/** Depois da senha (ou da recusa), a tela volta ao início sozinha para o próximo paciente. */
-const RECOMECAR_MS = 60_000;
-
-function lerSessao(): number | null {
-  try {
-    const v = Number(window.sessionStorage.getItem(SESSION_KEY));
-    return Number.isInteger(v) && v > 0 ? v : null;
-  } catch {
-    return null;
-  }
-}
-function salvarSessao(id: number | null) {
-  try {
-    if (id) window.sessionStorage.setItem(SESSION_KEY, String(id));
-    else window.sessionStorage.removeItem(SESSION_KEY);
-  } catch {
-    /* sem armazenamento: só não retoma após recarregar */
-  }
-}
 
 export interface UseTriagemOptions {
   /** Faz a LIA sinalizar (e legendar) um texto. */
@@ -130,7 +111,7 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
     async (id: number) => {
       const fim = await chamar(() => finalizarAtendimento(id), async () => acoes.current?.finalizar(id));
       if (!fim) return;
-      salvarSessao(null);
+      clearSavedSession();
       atendimentoRef.current = null;
       mudarPergunta(null);
       setFinalizacao(fim);
@@ -167,15 +148,15 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
     mudarFase("conectando");
 
     // Retoma o atendimento se a tela do totem recarregou no meio.
-    const salvo = lerSessao();
+    const salvo = readSavedSession();
     if (salvo) {
       const at = await chamar(() => consultarAtendimento(salvo), async () => acoes.current?.comecar());
       if (!at) return;
-      if (at?.status === "em_andamento") {
+      if (at.status === "em_andamento") {
         await aplicar({ ...at, repetir: false });
         return;
       }
-      salvarSessao(null);
+      clearSavedSession();
     }
 
     const textos = await buscarTextos().catch(() => null);
@@ -196,7 +177,7 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
       }
       const at = await chamar(() => iniciarAtendimento(modo), async () => acoes.current?.consentir(true));
       if (!at) return;
-      salvarSessao(at.id);
+      saveSession(at.id);
       await aplicar(at);
     },
     [aplicar, chamar, modo, mudarFase],
@@ -217,7 +198,7 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
     [aplicar, chamar],
   );
 
-  /** Entrada livre: frase sinalizada em Libras ou texto digitado. */
+  /** Entrada livre: frase sinalizada em Libras, falada no microfone ou digitada. */
   const entrada = useCallback(
     async (frase: string, canal: ModoAcessibilidade) => {
       const texto = frase.trim();
@@ -229,7 +210,8 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
         return;
       }
       const p = perguntaRef.current;
-      if (faseRef.current === "pergunta" && p) await responderPergunta(escolherValor(p, texto), canal);
+      if (faseRef.current !== "pergunta" || !p) return;
+      await responderPergunta(interpretarEntrada(p, texto, canal), canal);
     },
     [consentir, responderPergunta],
   );
@@ -250,7 +232,7 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
     ocupado.current = false;
     ultimaAcao.current = null;
     atendimentoRef.current = null;
-    salvarSessao(null);
+    clearSavedSession();
     mudarPergunta(null);
     mudarFase("conectando");
     setFinalizacao(null);
@@ -260,7 +242,7 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
   }, [mudarFase, mudarPergunta]);
 
   const recomecar = useCallback(() => {
-    salvarSessao(null);
+    clearSavedSession();
     atendimentoRef.current = null;
     if (onReset) {
       onReset();
@@ -277,7 +259,7 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
   // Próximo paciente: volta ao início depois da senha ou da recusa.
   useEffect(() => {
     if (fase !== "finalizado" && fase !== "recusado") return;
-    const t = setTimeout(recomecar, RECOMECAR_MS);
+    const t = setTimeout(recomecar, RESTART_AFTER_END_MS);
     return () => clearTimeout(t);
   }, [fase, recomecar]);
 
