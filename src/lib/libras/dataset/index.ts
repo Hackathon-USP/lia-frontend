@@ -1,3 +1,4 @@
+import { processSteppedSource, type SteppedFrameSource, type SteppedImportOptions } from '../stepped-capture';
 import type { LandmarkTracker } from '../tracker';
 import { processVideoFile, type ImportVideoOptions, type VideoImportResult } from '../video-import';
 import { captureFrames, type FrameSource } from './recorder';
@@ -12,6 +13,15 @@ export interface ImportVideoMeta extends ImportVideoOptions {
   source: SampleSource;
   /** Padrão: o nome do arquivo. */
   origin?: string;
+}
+
+export interface ImportSteppedMeta extends SteppedImportOptions {
+  /** Quem sinaliza na animação (ex.: 'vlibras-hosana'). Obrigatório. */
+  signer: string;
+  /** Ex.: 'vlibras'. */
+  source: SampleSource;
+  /** Ex.: 'vlibras:hosana:1x:DOR'. */
+  origin: string;
 }
 
 export interface RecordOptions {
@@ -38,6 +48,12 @@ export interface LiaDataset {
    * Lança `LiaVisionError` com `video-no-hands`, `video-no-segment` ou `video-decode-failed`.
    */
   importVideo(file: Blob, gloss: string, meta: ImportVideoMeta): Promise<VideoImportResult>;
+  /**
+   * Grava uma animação controlada quadro a quadro (por exemplo, o avatar do VLibras) pelo mesmo
+   * pipeline da importação de vídeos e salva. Na mesma fila dos vídeos: um de cada vez.
+   * Lança `LiaVisionError` com `video-no-hands`, `video-no-segment` ou `video-decode-failed`.
+   */
+  importStepped(source: SteppedFrameSource, gloss: string, meta: ImportSteppedMeta): Promise<VideoImportResult>;
   /** Salva uma amostra já montada. */
   add(sample: Sample): Promise<SampleMeta>;
   list(filter?: SampleFilter): Promise<SampleMeta[]>;
@@ -91,6 +107,17 @@ export function createDataset(
         const tracker = await options.getTracker();
         const origin = meta.origin ?? (file as File).name ?? 'video';
         const result = await processVideoFile(file, tracker, { gloss, signer: meta.signer, source: meta.source, origin }, meta);
+        await s.add(result.sample);
+        return result;
+      });
+    },
+    importStepped(source, gloss, meta) {
+      return serial(async () => {
+        if (!options.getTracker) throw new Error('Para gravar animações use lia.dataset (precisa dos modelos do MediaPipe).');
+        if (!meta?.signer?.trim()) throw new Error('Informe quem sinaliza na animação (signer).');
+        const s = await store();
+        const tracker = await options.getTracker();
+        const result = await processSteppedSource(source, tracker, { gloss, signer: meta.signer, source: meta.source, origin: meta.origin }, meta);
         await s.add(result.sample);
         return result;
       });

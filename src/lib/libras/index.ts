@@ -130,6 +130,7 @@ export {
 } from './segmenter';
 export {
   extractVideoFrames,
+  processExtractedFrames,
   processVideoFile,
   sampleFromFrames,
   type ImportVideoOptions,
@@ -139,6 +140,15 @@ export {
   type VideoImportReport,
   type VideoImportResult,
 } from './video-import';
+export {
+  DEFAULT_CAPTURE_BACKGROUND,
+  extractSteppedFrames,
+  processSteppedSource,
+  signingHandPresence,
+  type SteppedCaptureOptions,
+  type SteppedFrameSource,
+  type SteppedImportOptions,
+} from './stepped-capture';
 
 // Dataset (IndexedDB)
 export {
@@ -160,6 +170,7 @@ export {
   type DatasetStoreOptions,
   type FrameSource,
   type ImportReport,
+  type ImportSteppedMeta,
   type ImportVideoMeta,
   type LiaDataset,
   type RecordOptions,

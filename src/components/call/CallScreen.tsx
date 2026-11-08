@@ -203,6 +203,9 @@ export function CallScreen({ modo = "libras", active = true, onEnd }: Props) {
         exportData={signs.exportData}
         importData={signs.importData}
         hadOldData={signs.hadOldData}
+        vlibrasEnabled={signs.vlibrasEnabled}
+        setVlibrasEnabled={signs.setVlibrasEnabled}
+        downloadFromServer={signs.downloadFromServer}
       />
     </div>
   );

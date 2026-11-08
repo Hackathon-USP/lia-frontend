@@ -35,6 +35,52 @@ function restoreNames(gloss: string) {
   return gloss.replace(/\bXQ(\d+)\b/g, (m, n: string) => PROTECTED_NAMES[Number(n) - 1] ?? m);
 }
 
+/** Endereço do sinal no dicionário do VLibras (o mesmo arquivo que o avatar baixa para sinalizar). */
+export function vlibrasSignUrl(gloss: string): string {
+  return `${env.vlibrasDictionaryStaticUrl}${env.vlibrasRegion}/${encodeURIComponent(gloss)}`;
+}
+
+/**
+ * O dicionário do VLibras tem um sinal para esta glosa? Sem sinal, o avatar soletra a palavra
+ * letra por letra. `null` = não deu para saber (rede fora, servidor com erro).
+ */
+export async function vlibrasHasSign(gloss: string, signal?: AbortSignal): Promise<boolean | null> {
+  try {
+    const res = await fetch(vlibrasSignUrl(gloss), { method: "HEAD", mode: "cors", credentials: "omit", cache: "no-store", signal });
+    if (res.status === 404) return false;
+    return res.ok ? true : null;
+  } catch (err) {
+    if (signal?.aborted) throw err;
+    return null;
+  }
+}
+
+export type VLibrasGlossStatus = "ok" | "traduzido" | "ausente" | "erro";
+
+/**
+ * Acha a glosa do VLibras para um sinal do vocabulário da LIA: primeiro a própria glosa; se o
+ * dicionário não tiver, a tradução da palavra pelo tradutor do VLibras (ex.: "obrigada" → OBRIGADO).
+ */
+export async function resolveVLibrasGloss(
+  gloss: string,
+  signal?: AbortSignal,
+): Promise<{ gloss: string | null; status: VLibrasGlossStatus }> {
+  const direct = await vlibrasHasSign(gloss, signal);
+  if (direct) return { gloss, status: "ok" };
+  let translated: string | null = null;
+  try {
+    const words = (await translateToGloss(gloss.toLocaleLowerCase("pt-BR"), signal))
+      .replace(/\[[^\]]*\]/g, " ") // [PONTO], [INTERROGAÇÃO]…
+      .trim()
+      .split(/\s+/);
+    if (words.length === 1 && words[0] && words[0] !== gloss) translated = words[0];
+  } catch (err) {
+    if (signal?.aborted) throw err;
+  }
+  if (translated && (await vlibrasHasSign(translated, signal))) return { gloss: translated, status: "traduzido" };
+  return { gloss: null, status: direct === null ? "erro" : "ausente" };
+}
+
 /**
  * Traduz um texto em português para a glosa de Libras que o avatar sinaliza.
  * Ex.: "Olá, qual é a sua queixa?" → "OLÁ QUAL SEU QUEIXA [INTERROGAÇÃO]"
