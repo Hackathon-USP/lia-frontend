@@ -8,6 +8,8 @@ export const ROUTES = {
   sobre: "/sobre",
   /** Tela do guichê (não linkar no site: ainda sem autenticação) */
   recepcao: "/recepcao",
+  /** Gera exemplos de sinais com o avatar do VLibras para o reconhecimento de Libras (uso da equipe) */
+  treinar: "/treinar",
 } as const;
 
 export type AppRoute = (typeof ROUTES)[keyof typeof ROUTES];

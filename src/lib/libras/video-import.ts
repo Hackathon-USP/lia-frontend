@@ -269,7 +269,11 @@ export async function processVideoFile(
   init: SampleInit,
   options: ImportVideoOptions = {},
 ): Promise<VideoImportResult> {
-  const ex = await extractVideoFrames(file, tracker, options);
+  return processExtractedFrames(await extractVideoFrames(file, tracker, options), init, options);
+}
+
+/** Segmenta os quadros já extraídos (de um vídeo ou de uma animação) e monta a amostra (não salva). */
+export function processExtractedFrames(ex: VideoExtraction, init: SampleInit, options: SegmentCropOptions = {}): VideoImportResult {
   const extra = {
     sourceSize: [ex.sourceWidth, ex.sourceHeight] as [number, number],
     processedSize: [ex.width, ex.height] as [number, number],

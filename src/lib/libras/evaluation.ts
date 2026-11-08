@@ -1,6 +1,6 @@
 import { DtwClassifier } from './classifier/client';
 import type { DtwOptions, ExcludeFilter, Template } from './classifier/dtw';
-import type { Sample, SampleSource } from './dataset/types';
+import { SAMPLE_SOURCES, type Sample, type SampleSource } from './dataset/types';
 import { buildLetterTemplates, LETTER_DIM, type FingerspellingOptions } from './fingerspelling';
 import { buildTemplates, type BuildTemplatesOptions, type Top3Item } from './recognition';
 import { SEQUENCE_DIM, SEQUENCE_LENGTH } from './sequence';
@@ -211,7 +211,7 @@ export async function evaluate(samples: readonly Sample[], options: EvaluationOp
   const t0 = performance.now();
   const { mode } = options;
   const warnings: string[] = [];
-  const trainSources = new Set(options.trainSources ?? ['proprio', 'v-librasil', 'minds']);
+  const trainSources = new Set<SampleSource>(options.trainSources ?? SAMPLE_SOURCES);
   const buildOpts: BuildTemplatesOptions = {
     vocabulary: options.vocabulary,
     segmentation: options.segmentation,

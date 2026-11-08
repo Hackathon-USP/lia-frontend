@@ -15,7 +15,7 @@ export type OrigemPergunta = "triagem" | "lia";
 export interface Pergunta {
   id: string;
   texto: string;
-  /** Rótulo curto, usado nos resumos (ex.: "Onde dói", "Suor frio") */
+  /** Rótulo curto, usado na conferência e nos resumos (ex.: "Onde dói", "Suor frio"). Ausente em backs antigos. */
   titulo?: string;
   tipo: "opcoes" | "escala";
   opcoes: Opcao[];
@@ -67,6 +67,29 @@ export interface Senha {
   status: StatusSenha;
   /** ISO em UTC */
   criada_em: string;
+}
+
+/** Uma resposta no resumo de conferência (GET /atendimentos/{id}/conferencia). */
+export interface ItemConferencia {
+  /** Mandar em DELETE /atendimentos/{id}/respostas/{pergunta_id} para corrigir */
+  pergunta_id: string;
+  /** "Onde dói" */
+  titulo: string;
+  /** "Onde é a dor?" */
+  pergunta: string;
+  /** Texto legível: "Peito", "9 de 10" */
+  resposta: string;
+}
+
+/** Resumo das respostas para o paciente conferir antes da senha. Sem nome e CPF. */
+export interface Conferencia {
+  atendimento_id: number;
+  /** Na ordem da triagem */
+  itens: ItemConferencia[];
+  /** Tudo numa frase, para a LIA sinalizar e falar */
+  texto: string;
+  /** Triagem completa e nome/CPF informados */
+  pode_finalizar: boolean;
 }
 
 export interface Finalizacao {

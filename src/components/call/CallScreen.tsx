@@ -59,9 +59,11 @@ export function CallScreen({ modo = "libras", active = true, onEnd }: Props) {
   }, [active]);
 
   // Nome se soletra: na identificação a leitura das mãos já começa em datilologia.
+  // Na conferência volta aos sinais (SIM / NÃO).
   const { setMode: setSignMode } = input.signs;
   useEffect(() => {
     if (triagem.fase === "identificacao") setSignMode("datilologia");
+    else if (triagem.fase === "conferencia") setSignMode("sinais");
   }, [triagem.fase, setSignMode]);
 
   useEffect(() => {
@@ -110,7 +112,7 @@ export function CallScreen({ modo = "libras", active = true, onEnd }: Props) {
                   pensando: triagem.carregando || triagem.pensando,
                   interim: ouvido.interim,
                   ouvindo: ouvido.listening,
-                  esperandoResposta: ["consentimento", "pergunta", "identificacao"].includes(triagem.fase),
+                  esperandoResposta: ["consentimento", "pergunta", "identificacao", "conferencia"].includes(triagem.fase),
                 })}
                 interim={ouvido.interim}
                 libras={libras}
@@ -129,6 +131,18 @@ export function CallScreen({ modo = "libras", active = true, onEnd }: Props) {
               onMudar: triagem.mudarRascunho,
               erro: triagem.erroIdentificacao,
               onEnviar: (nome, cpf) => void triagem.identificar(nome, cpf),
+            }}
+            conferencia={{
+              resumo: triagem.conferencia,
+              onConfirmar: () => {
+                input.mostrarResposta("Está tudo certo");
+                void triagem.confirmarConferencia();
+              },
+              onCorrigir: (perguntaId) => {
+                input.mostrarResposta("Quero corrigir");
+                void triagem.corrigir(perguntaId);
+              },
+              onCorrigirIdentificacao: triagem.corrigirIdentificacao,
             }}
             fase={triagem.fase}
             pergunta={triagem.pergunta}
@@ -189,6 +203,9 @@ export function CallScreen({ modo = "libras", active = true, onEnd }: Props) {
         exportData={signs.exportData}
         importData={signs.importData}
         hadOldData={signs.hadOldData}
+        vlibrasEnabled={signs.vlibrasEnabled}
+        setVlibrasEnabled={signs.setVlibrasEnabled}
+        downloadFromServer={signs.downloadFromServer}
       />
     </div>
   );

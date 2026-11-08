@@ -19,11 +19,22 @@ export const API_ROUTES = {
     responder: (id: number) => `/atendimentos/${id}/respostas`,
     /** PUT {nome, cpf} — obrigatório antes de finalizar (422 = nome/CPF inválido) */
     identificar: (id: number) => `/atendimentos/${id}/identificacao`,
+    /** GET — resumo das respostas para o paciente conferir antes da senha (sem nome e CPF) */
+    conferencia: (id: number) => `/atendimentos/${id}/conferencia`,
+    /** DELETE — volta a triagem para essa pergunta (apaga ela e as seguintes) e devolve o atendimento */
+    corrigir: (id: number, perguntaId: string) => `/atendimentos/${id}/respostas/${encodeURIComponent(perguntaId)}`,
     /** POST — emite a senha e devolve a mensagem final (409 = falta identificar) */
     finalizar: (id: number) => `/atendimentos/${id}/finalizar`,
   },
   senhas: {
     consultar: (codigo: string) => `/senhas/${codigo}`,
+  },
+  /** Amostras para treinar o reconhecimento de Libras (geradas com o avatar do VLibras em /treinar). */
+  libras: {
+    /** POST {amostras} (até 100) · GET ?fonte=&glosa=&depois_de=&limite= · DELETE ?fonte=&glosa= */
+    amostras: "/libras/amostras",
+    /** GET ?fonte= — quantas amostras há por glosa, fonte e sinalizante */
+    resumo: "/libras/amostras/resumo",
   },
   /** Tela do guichê. Sem autenticação ainda: não divulgar a URL da tela. */
   recepcao: {

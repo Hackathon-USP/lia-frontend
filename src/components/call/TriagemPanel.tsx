@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { RESTART_AFTER_END_MS } from "@/config/totem";
 import type { FaseTriagem, RascunhoIdentificacao } from "@/hooks/useTriagem";
-import type { Finalizacao, Pergunta } from "@/types";
+import type { Conferencia, Finalizacao, Pergunta } from "@/types";
+import { ConferenciaResumo } from "./ConferenciaResumo";
 import { IdentificacaoForm } from "./IdentificacaoForm";
 import { ResetCountdown } from "./ResetCountdown";
 import { optionButton, primaryButton } from "./styles";
@@ -21,6 +22,12 @@ interface Props {
     onMudar: (parcial: Partial<RascunhoIdentificacao>) => void;
     erro: string | null;
     onEnviar: (nome: string, cpf: string) => void;
+  };
+  conferencia: {
+    resumo: Conferencia | null;
+    onConfirmar: () => void;
+    onCorrigir: (perguntaId: string) => void;
+    onCorrigirIdentificacao: () => void;
   };
   onConsentir: (aceita: boolean) => void;
   onResponder: (valor: string | number, rotulo: string) => void;
@@ -51,7 +58,7 @@ function IntensityScale({ pergunta, carregando, onResponder }: Pick<Props, "onRe
   );
 }
 
-export function TriagemPanel({ fase, pergunta, finalizacao, carregando, libras, consentimento, identificacao, onConsentir, onResponder, onRecomecar }: Props) {
+export function TriagemPanel({ fase, pergunta, finalizacao, carregando, libras, consentimento, identificacao, conferencia, onConsentir, onResponder, onRecomecar }: Props) {
   return (
     <section aria-label="Atendimento" aria-busy={carregando} className="w-full px-4 py-6 sm:px-8">
       <div className="mx-auto max-w-3xl space-y-6">
@@ -88,6 +95,15 @@ export function TriagemPanel({ fase, pergunta, finalizacao, carregando, libras, 
           </div> : <IntensityScale key={pergunta.id} pergunta={pergunta} carregando={carregando} onResponder={onResponder} />}
         </>}
         {fase === "identificacao" && <IdentificacaoForm {...identificacao} carregando={carregando} libras={libras} />}
+        {fase === "conferencia" && conferencia.resumo && <ConferenciaResumo
+          conferencia={conferencia.resumo}
+          identificacao={identificacao.rascunho}
+          carregando={carregando}
+          libras={libras}
+          onConfirmar={conferencia.onConfirmar}
+          onCorrigir={conferencia.onCorrigir}
+          onCorrigirIdentificacao={conferencia.onCorrigirIdentificacao}
+        />}
         {fase === "finalizado" && finalizacao &&<div className="space-y-6 text-center">
           <div className="rounded-3xl bg-white p-6 text-tinta shadow-lg sm:p-10">
             <h2 className="text-2xl font-bold">Sua senha de atendimento</h2>

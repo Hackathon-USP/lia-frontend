@@ -5,8 +5,10 @@ import { interpretarIdentificacao, mascararNumeros } from "@/lib/triagem/identif
 import { interpretarEntrada, simOuNao } from "@/lib/triagem/interpretar";
 import {
   acordarBack,
+  buscarConferencia,
   buscarTextos,
   consultarAtendimento,
+  corrigirResposta,
   finalizarAtendimento,
   identificarPaciente,
   iniciarAtendimento,
@@ -17,6 +19,7 @@ import {
 import {
   ApiError,
   type Atendimento,
+  type Conferencia,
   type FaseConversa,
   type Finalizacao,
   type ModoAcessibilidade,
@@ -29,12 +32,32 @@ import {
 /*
  * Fluxo da tela do paciente no back da LIA:
  *   boas-vindas + consentimento → POST /atendimentos → pergunta → POST /respostas → … →
- *   (proxima_pergunta = null) → nome e CPF (PUT /identificacao) → POST /finalizar → senha.
+ *   (proxima_pergunta = null) → nome e CPF (PUT /identificacao) →
+ *   conferência (GET /conferencia; corrigir = DELETE /respostas/{pergunta_id} e volta à pergunta) →
+ *   POST /finalizar → senha.
  * A cada passo a LIA sinaliza o texto em Libras (falar) e a tela mostra as opções para tocar.
  * Avisos de erro do paciente (CPF inválido etc.) também passam pela LIA, para quem não lê português.
  */
 
-export type FaseTriagem = "conectando" | "consentimento" | "pergunta" | "identificacao" | "finalizado" | "recusado";
+export type FaseTriagem =
+  | "conectando"
+  | "consentimento"
+  | "pergunta"
+  | "identificacao"
+  | "conferencia"
+  | "finalizado"
+  | "recusado";
+
+/* Falas da LIA na conferência. */
+const CONF = {
+  /** Se o back não mandar o texto do resumo */
+  padrao: "Confira suas respostas na tela. Está tudo certo? Se algo estiver errado, escolha a resposta que quer corrigir.",
+  escolherQual: "Tudo bem. Toque na resposta que quer corrigir, ou diga qual é.",
+};
+
+/** Minúsculas, sem acentos e pontuação: para achar o título de uma resposta numa frase. */
+const normalizar = (s: string) =>
+  s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
 
 /** Usados se o back não responder /conteudo/textos (mesmos textos do back). */
 const TEXTOS_PADRAO: TextosTotem = {
@@ -94,6 +117,9 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
   const [fase, setFase] = useState<FaseTriagem>("conectando");
   const [pergunta, setPergunta] = useState<Pergunta | null>(null);
   const [finalizacao, setFinalizacao] = useState<Finalizacao | null>(null);
+  /** Resumo das respostas mostrado antes da senha */
+  const [conferencia, setConferencia] = useState<Conferencia | null>(null);
+  const conferenciaRef = useRef<Conferencia | null>(null);
   const [carregando, setCarregando] = useState(false);
   const [lento, setLento] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -123,6 +149,8 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
     consentir: (aceita: boolean) => Promise<void>;
     responderPergunta: (valor: string | number, canal: ModoAcessibilidade, confianca?: number) => Promise<void>;
     identificar: (nome: string, cpf: string) => Promise<void>;
+    conferir: (id: number) => Promise<void>;
+    corrigir: (perguntaId: string) => Promise<void>;
   } | null>(null);
 
   const registrar = useCallback((quem: TurnoConversa["quem"], texto: string) => {
@@ -153,6 +181,10 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
   const mudarPergunta = useCallback((p: Pergunta | null) => {
     perguntaRef.current = p;
     setPergunta(p);
+  }, []);
+  const mudarConferencia = useCallback((c: Conferencia | null) => {
+    conferenciaRef.current = c;
+    setConferencia(c);
   }, []);
 
   /**
@@ -209,14 +241,35 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
       clearSavedSession();
       atendimentoRef.current = null;
       mudarPergunta(null);
+      mudarConferencia(null);
       setFinalizacao(fim);
       mudarFase("finalizado");
       falarRef.current(fim.mensagem_final);
     },
-    [chamar, mudarFase, mudarPergunta, pedirIdentificacao],
+    [chamar, mudarConferencia, mudarFase, mudarPergunta, pedirIdentificacao],
   );
 
-  /** Aplica a resposta do back: repetir, próxima pergunta, identificação ou finalizar. */
+  /** Mostra o resumo das respostas e a LIA lê tudo, antes de emitir a senha. */
+  const conferir = useCallback(
+    async (id: number) => {
+      let semConferencia = false;
+      const conf = await chamar(
+        () => buscarConferencia(id),
+        async () => acoes.current?.conferir(id),
+        // 404: back antigo, sem a conferência. Segue direto para a senha.
+        (err) => err instanceof ApiError && err.status === 404 && ((semConferencia = true), true),
+      );
+      if (semConferencia) return finalizar(id);
+      if (!conf) return;
+      mudarPergunta(null);
+      mudarConferencia(conf);
+      mudarFase("conferencia");
+      falarRef.current(conf.texto || CONF.padrao);
+    },
+    [chamar, finalizar, mudarConferencia, mudarFase, mudarPergunta],
+  );
+
+  /** Aplica a resposta do back: repetir, próxima pergunta, identificação ou conferência. */
   const aplicar = useCallback(
     async (at: Atendimento) => {
       atendimentoRef.current = at;
@@ -226,8 +279,10 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
       }
       if (at.proxima_pergunta) {
         const proxima = at.proxima_pergunta;
-        // Perguntas da LIA (IA) vêm depois das fixas; na primeira, ela avisa que vai perguntar mais.
-        const primeiraDaLia = proxima.origem === "lia" && perguntaRef.current?.origem !== "lia";
+        // Perguntas da LIA (IA) vêm depois das fixas; ao passar de uma fixa para a primeira delas, ela avisa
+        // que vai perguntar mais (não ao voltar da conferência para corrigir, nem ao retomar a sessão).
+        const anterior = perguntaRef.current;
+        const primeiraDaLia = proxima.origem === "lia" && anterior !== null && anterior.origem !== "lia";
         mudarPergunta(proxima);
         mudarFase("pergunta");
         falarRef.current(primeiraDaLia ? `${PONTE_PERGUNTAS_DA_LIA} ${proxima.texto}` : proxima.texto);
@@ -237,9 +292,10 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
         pedirIdentificacao();
         return;
       }
-      await finalizar(at.id);
+      // Triagem completa e identificado (ex.: depois de corrigir uma resposta): confere de novo.
+      await conferir(at.id);
     },
-    [finalizar, mudarFase, mudarPergunta, pedirIdentificacao],
+    [conferir, mudarFase, mudarPergunta, pedirIdentificacao],
   );
 
   /** Mostra o problema no formulário e a LIA explica (em Libras e voz). */
@@ -248,7 +304,7 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
     falarRef.current(mensagem);
   }, []);
 
-  /** Nome e CPF digitados → back → senha. */
+  /** Nome e CPF digitados → back → conferência das respostas. */
   const identificar = useCallback(
     async (nome: string, cpf: string) => {
       const at = atendimentoRef.current;
@@ -265,10 +321,40 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
       );
       if (!res) return;
       atendimentoRef.current = res;
-      await finalizar(at.id);
+      await conferir(at.id);
     },
-    [chamar, finalizar, recusarIdentificacao],
+    [chamar, conferir, recusarIdentificacao],
   );
+
+  /** Na conferência: o paciente confirmou que está tudo certo → senha. */
+  const confirmarConferencia = useCallback(async () => {
+    const at = atendimentoRef.current;
+    if (!at || faseRef.current !== "conferencia") return;
+    await finalizar(at.id);
+  }, [finalizar]);
+
+  /** Na conferência: volta para a pergunta escolhida (o back apaga ela e as seguintes). */
+  const corrigir = useCallback(
+    async (perguntaId: string) => {
+      const at = atendimentoRef.current;
+      if (!at || faseRef.current !== "conferencia") return;
+      const res = await chamar(
+        () => corrigirResposta(at.id, perguntaId),
+        async () => acoes.current?.corrigir(perguntaId),
+      );
+      if (!res) return;
+      mudarConferencia(null);
+      await aplicar(res);
+    },
+    [aplicar, chamar, mudarConferencia],
+  );
+
+  /** Na conferência: volta ao formulário de nome e CPF, com o que já foi preenchido. */
+  const corrigirIdentificacao = useCallback(() => {
+    if (faseRef.current !== "conferencia") return;
+    mudarConferencia(null);
+    pedirIdentificacao();
+  }, [mudarConferencia, pedirIdentificacao]);
 
   /** Muda a cada frase do paciente: a resposta da IA para uma frase antiga é descartada. */
   const conversaVersao = useRef(0);
@@ -435,6 +521,19 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
 
       if (fase === "identificacao") return ditarIdentificacao(texto, canal);
 
+      if (fase === "conferencia") {
+        // "Corrigir onde dói": a frase cita o título de uma resposta.
+        const t = normalizar(texto);
+        const alvo = conferenciaRef.current?.itens.find((i) => {
+          const titulo = normalizar(i.titulo);
+          return titulo.length >= 3 && t.includes(titulo);
+        });
+        if (alvo) return corrigir(alvo.pergunta_id);
+        const r = simOuNao(texto) ?? (/\b(certo|correto|isso)\b/.test(t) ? "sim" : null);
+        if (r === "sim") return confirmarConferencia();
+        return falarRef.current(r === "nao" ? CONF.escolherQual : textosRef.current.repetir);
+      }
+
       if (fase === "consentimento") {
         const r = simOuNao(texto);
         if (r) return consentir(r === "sim");
@@ -458,11 +557,11 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
       // Sem IA: manda a frase como está e o back decide (ou pede para repetir).
       return responderPergunta(texto, canal);
     },
-    [consentir, ditarIdentificacao, perguntarIA, registrar, responderPergunta],
+    [confirmarConferencia, consentir, corrigir, ditarIdentificacao, perguntarIA, registrar, responderPergunta],
   );
 
   useEffect(() => {
-    acoes.current = { finalizar, comecar, consentir, responderPergunta, identificar };
+    acoes.current = { finalizar, comecar, consentir, responderPergunta, identificar, conferir, corrigir };
   });
 
   const tentarDeNovo = useCallback(() => {
@@ -482,6 +581,7 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
     atendimentoRef.current = null;
     clearSavedSession();
     mudarPergunta(null);
+    mudarConferencia(null);
     mudarFase("conectando");
     setFinalizacao(null);
     setErro(null);
@@ -489,7 +589,7 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
     mudarRascunho(RASCUNHO_VAZIO);
     setLento(false);
     setCarregando(false);
-  }, [mudarFase, mudarPergunta, mudarRascunho]);
+  }, [mudarConferencia, mudarFase, mudarPergunta, mudarRascunho]);
 
   const recomecar = useCallback(() => {
     clearSavedSession();
@@ -525,6 +625,11 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
     identificar,
     limpar,
     pergunta,
+    /** Resumo das respostas na fase "conferencia" */
+    conferencia,
+    confirmarConferencia,
+    corrigir,
+    corrigirIdentificacao,
     finalizacao,
     carregando,
     lento,
