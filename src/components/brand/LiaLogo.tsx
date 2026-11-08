@@ -30,7 +30,7 @@ export function LiaLogo({ tom = "escuro" }: { tom?: "escuro" | "claro" }) {
       href={ROUTES.home}
       className="inline-flex items-center gap-2.5 rounded-xl focus-visible:outline-3 focus-visible:outline-offset-4 focus-visible:outline-ambar"
     >
-      <Image src="/assets/icon_1.jpeg" alt="" width={40} height={40} priority className="size-10 rounded-xl shadow-sm" />
+      <Image src="/assets/icon.jpeg" alt="" width={40} height={40} priority className="size-10 rounded-xl shadow-sm" />
       <LiaWordmark className={`text-[2rem] ${tom === "claro" ? "text-white" : "text-petroleo"}`} />
       <span className="sr-only">LIA, página inicial</span>
     </Link>
