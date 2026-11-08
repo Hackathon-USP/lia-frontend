@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { clearSavedSession, IDLE_COUNTDOWN_S, IDLE_RESET_MS, IDLE_WARNING_MS, onActivity } from "@/config/totem";
 import { CallScreen } from "./CallScreen";
 import { ResetCountdown } from "./ResetCountdown";
 
@@ -7,21 +8,17 @@ export function TotemScreen() {
   const [warning, setWarning] = useState(false);
   const [activity, setActivity] = useState(0);
   const reset = useCallback(() => {
-    try { sessionStorage.removeItem("lia:atendimento"); } catch { /* Storage may be unavailable. */ }
+    clearSavedSession();
     setMode(null);
     setWarning(false);
   }, []);
 
-  useEffect(() => {
-    const active = () => { setWarning(false); setActivity(Date.now()); };
-    window.addEventListener("lia:activity", active);
-    return () => window.removeEventListener("lia:activity", active);
-  }, []);
+  useEffect(() => onActivity(() => { setWarning(false); setActivity(Date.now()); }), []);
 
   useEffect(() => {
     if (!mode) return;
-    const warn = window.setTimeout(() => setWarning(true), 180_000);
-    const end = window.setTimeout(reset, 210_000);
+    const warn = window.setTimeout(() => setWarning(true), IDLE_WARNING_MS);
+    const end = window.setTimeout(reset, IDLE_RESET_MS);
     return () => { clearTimeout(warn); clearTimeout(end); };
   }, [mode, activity, reset]);
 
@@ -66,7 +63,7 @@ export function TotemScreen() {
         <div role="alertdialog" aria-modal="true" aria-labelledby="idle-title" className="fixed inset-0 z-50 flex items-center justify-center bg-tinta/95 p-6 text-white">
           <div className="flex max-w-lg flex-col gap-6 text-center">
             <h2 id="idle-title" className="text-3xl font-bold">Você ainda está aqui?</h2>
-            <p className="text-xl">Para proteger suas informações, a tela será limpa em <ResetCountdown seconds={30} />.</p>
+            <p className="text-xl">Para proteger suas informações, a tela será limpa em <ResetCountdown seconds={IDLE_COUNTDOWN_S} />.</p>
             <button autoFocus className={`${button} !bg-ambar !text-tinta`} onClick={() => { setWarning(false); setActivity(Date.now()); }}>Continuar atendimento</button>
             <button className={`${button} border border-white/40 !bg-transparent`} onClick={reset}>Encerrar</button>
           </div>

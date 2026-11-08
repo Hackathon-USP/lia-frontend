@@ -5,8 +5,6 @@
 export const env = {
   /** URL base do back-end da LIA (Swagger em <apiUrl>/docs) */
   apiUrl: (process.env.NEXT_PUBLIC_API_URL || "https://backend-lia-6if6.onrender.com").replace(/\/+$/, ""),
-  /** Enquanto o back não estiver pronto, usa respostas mockadas */
-  useMock: process.env.NEXT_PUBLIC_USE_MOCK !== "false",
   /** Raiz do VLibras */
   vlibrasUrl: process.env.NEXT_PUBLIC_VLIBRAS_URL ?? "https://vlibras.gov.br/app",
   /** Avatar do VLibras que dá corpo à LIA: "hosana" (padrão), "icaro" ou "guga" */
