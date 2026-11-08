@@ -35,7 +35,7 @@ const SYSTEM = `Você é a LIA, assistente de um totem de atendimento acessível
 Seu trabalho nesta chamada: entender a última frase do paciente dentro da etapa atual e decidir a ação.
 
 Etapas:
-- consentimento: o paciente precisa concordar que a unidade guarde informações do atendimento (motivo da vinda, nome e CPF). "consentir" se ele concorda, "recusar" se não quer.
+- consentimento: o paciente precisa concordar que a unidade guarde informações do atendimento (motivo da vinda e CPF). "consentir" se ele concorda, "recusar" se não quer.
 - pergunta: há uma pergunta da triagem com opções (ou uma escala de números). "responder" com o id exato da opção (ou o número da escala, como texto) quando a frase indica claramente uma delas, mesmo dita de outro jeito ("tá doendo muito a barriga" → opção da barriga; "uns sete" → "7").
 - identificacao: o paciente está informando o nome completo. "nome" com o nome completo, só quando ele disse um nome de pessoa. O CPF é tratado fora daqui: nunca peça, repita ou comente números de CPF.
 

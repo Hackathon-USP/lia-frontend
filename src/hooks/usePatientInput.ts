@@ -29,7 +29,7 @@ export interface PatientInputOptions {
   /** Esperando o back responder */
   busy: boolean;
   /**
-   * O paciente está ditando dados (nome e CPF): a fala vai para o formulário
+   * O paciente está ditando o CPF: a fala vai para o formulário
    * mesmo com o modo intérprete ligado.
    */
   dictating?: boolean;
@@ -54,7 +54,7 @@ export function usePatientInput({ active, training, busy, dictating = false, cam
     if (!command || !active || training) return;
     if (canal === "libras" && busy) return;
     markActivity();
-    setUserCaption(command);
+    if (!dictating) setUserCaption(command);
     if (interprete && canal === "voz" && !dictating) {
       // Intérprete: a fala vira Libras no avatar, com a legenda em português.
       void lia.say(command, { voice: false });

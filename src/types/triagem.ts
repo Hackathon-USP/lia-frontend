@@ -51,7 +51,6 @@ export interface Resposta {
 
 /** PUT /atendimentos/{id}/identificacao */
 export interface Identificacao {
-  nome: string;
   /** Com ou sem máscara */
   cpf: string;
 }
@@ -81,7 +80,7 @@ export interface ItemConferencia {
   resposta: string;
 }
 
-/** Resumo das respostas para o paciente conferir antes da senha. Sem nome e CPF. */
+/** Resumo das respostas para o paciente conferir antes da senha. Sem dados de identificação. */
 export interface Conferencia {
   atendimento_id: number;
   /** Na ordem da triagem */

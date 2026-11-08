@@ -11,6 +11,7 @@ const iconButton =
 interface Props {
   /** Atendimento em Libras (mostra câmera e soletrar) */
   libras: boolean;
+  canType: boolean;
   busy: boolean;
   camera: { on: boolean; requesting: boolean; toggle: () => void };
   onSwapPip: () => void;
@@ -25,12 +26,12 @@ interface Props {
  * Barra lateral da chamada e painel de entrada ao lado.
  * O texto digitado é estado daqui; para limpar entre pacientes, o pai troca a `key`.
  */
-export function CallControls({ libras, busy, camera, onSwapPip, input, voice, onEncerrar, onOpenTrainer }: Props) {
+export function CallControls({ libras, canType, busy, camera, onSwapPip, input, voice, onEncerrar, onOpenTrainer }: Props) {
   const [panel, setPanel] = useState<"typing" | "voice" | null>(null);
   const [draft, setDraft] = useState("");
   const { signs, ouvido } = input;
   const spelling = signs.mode === "datilologia";
-  const typing = panel === "typing";
+  const typing = canType && panel === "typing";
   const canChooseVoice = voice.supported && voice.enabled && voice.voices.length > 1;
   const choosingVoice = panel === "voice" && canChooseVoice;
 
@@ -59,11 +60,13 @@ export function CallControls({ libras, busy, camera, onSwapPip, input, voice, on
               )}
             </button>
           )}
-          <button type="button" aria-label="Digitar resposta" title="Digitar resposta" aria-expanded={typing}
-            aria-controls="typing-answer" onClick={() => setPanel(typing ? null : "typing")}
-            className={`${iconButton} ${typing ? controlOn : controlIdle}`}>
-            <IconKeyboard />
-          </button>
+          {canType && (
+            <button type="button" aria-label="Digitar resposta" title="Digitar resposta" aria-expanded={typing}
+              aria-controls="typing-answer" onClick={() => setPanel(typing ? null : "typing")}
+              className={`${iconButton} ${typing ? controlOn : controlIdle}`}>
+              <IconKeyboard />
+            </button>
+          )}
           {voice.supported && (
             <button type="button" onClick={voice.toggle} aria-label="Voz da LIA" aria-pressed={voice.enabled}
               title={voice.enabled ? "Desligar a voz da LIA" : "Ligar a voz da LIA"} className={`${iconButton} ${voice.enabled ? controlOn : controlIdle}`}>

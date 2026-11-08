@@ -58,12 +58,9 @@ export function CallScreen({ modo = "libras", active = true, onEnd }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- sessão muda apenas ao entrar/sair do atendimento
   }, [active]);
 
-  // Nome se soletra: na identificação a leitura das mãos já começa em datilologia.
-  // Na conferência volta aos sinais (SIM / NÃO).
   const { setMode: setSignMode } = input.signs;
   useEffect(() => {
-    if (triagem.fase === "identificacao") setSignMode("datilologia");
-    else if (triagem.fase === "conferencia") setSignMode("sinais");
+    if (triagem.fase === "identificacao" || triagem.fase === "conferencia") setSignMode("sinais");
   }, [triagem.fase, setSignMode]);
 
   useEffect(() => {
@@ -74,7 +71,9 @@ export function CallScreen({ modo = "libras", active = true, onEnd }: Props) {
 
   const completed = triagem.fase === "finalizado" || triagem.fase === "recusado";
   const libras = modo === "libras";
+  const identificando = triagem.fase === "identificacao";
   const { signs, ouvido } = input;
+  const interim = identificando ? "" : ouvido.interim;
   const layout = completed && !libras
     ? ""
     : libras && !completed
@@ -115,15 +114,15 @@ export function CallScreen({ modo = "libras", active = true, onEnd }: Props) {
                   turno={turnoAtual({
                     liaFalando: lia.talking,
                     pensando: triagem.carregando || triagem.pensando,
-                    interim: ouvido.interim,
+                    interim,
                     ouvindo: ouvido.listening,
                     esperandoResposta: ["consentimento", "pergunta", "identificacao", "conferencia"].includes(triagem.fase),
                   })}
-                  interim={ouvido.interim}
+                  interim={interim}
                   libras={libras}
                   podeInterromper={ouvido.listening}
                 />
-                <UserEcho userCaption={input.userCaption} />
+                {!identificando && <UserEcho userCaption={input.userCaption} />}
               </div>
             )}
             <TriagemPanel
@@ -132,10 +131,10 @@ export function CallScreen({ modo = "libras", active = true, onEnd }: Props) {
               consentimento={triagem.consentimento}
               identificacao={{
                 instrucao: triagem.textoIdentificacao,
-                rascunho: triagem.rascunho,
-                onMudar: triagem.mudarRascunho,
+                cpf: triagem.cpf,
+                onMudar: triagem.mudarCpf,
                 erro: triagem.erroIdentificacao,
-                onEnviar: (nome, cpf) => void triagem.identificar(nome, cpf),
+                onEnviar: () => void triagem.identificar(),
               }}
               conferencia={{
                 resumo: triagem.conferencia,
@@ -181,6 +180,7 @@ export function CallScreen({ modo = "libras", active = true, onEnd }: Props) {
           // Nova sessão fecha a digitação e apaga o rascunho.
           key={active ? "sessao" : "inativo"}
           libras={libras}
+          canType={!identificando}
           busy={triagem.carregando}
           camera={{ on: cameraOn, requesting: cameraStatus === "requesting", toggle: cameraOn ? stopCamera : () => void startCamera() }}
           onSwapPip={() => setPipSide((side) => (side === "right" ? "left" : "right"))}

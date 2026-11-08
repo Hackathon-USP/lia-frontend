@@ -1,11 +1,10 @@
-import type { RascunhoIdentificacao } from "@/hooks/useTriagem";
 import type { Conferencia } from "@/types";
 import { optionButton, primaryButton } from "./styles";
 
 interface Props {
   conferencia: Conferencia;
-  /** Nome e CPF que o paciente acabou de preencher (vazio se a tela recarregou) */
-  identificacao: RascunhoIdentificacao;
+  /** CPF preenchido nesta sessão (vazio se a tela recarregou). */
+  cpf: string;
   carregando: boolean;
   /** Atendimento em Libras: mostra o sinal de cada ação */
   libras: boolean;
@@ -17,9 +16,9 @@ interface Props {
 /**
  * Último passo antes da senha: o paciente confere o que respondeu (a LIA lê o mesmo resumo).
  * Corrigir uma resposta volta para aquela pergunta; as seguintes são perguntadas de novo.
- * Nome e CPF vêm do formulário do próprio totem (o back não os devolve) e a LIA não os lê em voz alta.
+ * O CPF vem do formulário e a LIA não o lê em voz alta.
  */
-export function ConferenciaResumo({ conferencia, identificacao, carregando, libras, onConfirmar, onCorrigir, onCorrigirIdentificacao }: Props) {
+export function ConferenciaResumo({ conferencia, cpf, carregando, libras, onConfirmar, onCorrigir, onCorrigirIdentificacao }: Props) {
   const { itens, pode_finalizar } = conferencia;
   return (
     <div className="space-y-5">
@@ -48,23 +47,13 @@ export function ConferenciaResumo({ conferencia, identificacao, carregando, libr
         ))}
       </ul>
 
-      <section aria-label="Seus dados" className="flex flex-col items-start gap-3 rounded-2xl bg-white/10 px-4 py-4 @sm:flex-row @sm:items-center">
+      <section aria-label="CPF informado" className="flex flex-col items-start gap-3 rounded-2xl bg-white/10 px-4 py-4 @sm:flex-row @sm:items-center">
         <dl className="min-w-0 flex-1 space-y-2">
-          {identificacao.nome && <div>
-            <dt className="text-base font-semibold text-white/80">Nome</dt>
-            <dd className="text-2xl font-bold break-words">{identificacao.nome}</dd>
-          </div>}
-          {identificacao.cpf && <div>
-            <dt className="text-base font-semibold text-white/80">CPF</dt>
-            <dd className="text-2xl font-bold tracking-wider tabular-nums">{identificacao.cpf}</dd>
-          </div>}
-          {!identificacao.nome && !identificacao.cpf && <div>
-            <dt className="text-base font-semibold text-white/80">Nome e CPF</dt>
-            <dd className="text-xl">Já informados</dd>
-          </div>}
+          <dt className="text-base font-semibold text-white/80">CPF</dt>
+          <dd className="text-2xl font-bold tabular-nums">{cpf || "Já informado"}</dd>
         </dl>
         <button type="button" disabled={carregando} onClick={onCorrigirIdentificacao}
-          aria-label="Corrigir nome ou CPF"
+          aria-label="Corrigir CPF"
           className={`${optionButton} !min-h-14 shrink-0 !px-5 !text-lg`}>
           Corrigir
         </button>

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { RESTART_AFTER_END_MS } from "@/config/totem";
-import type { FaseTriagem, RascunhoIdentificacao } from "@/hooks/useTriagem";
+import type { FaseTriagem } from "@/hooks/useTriagem";
 import type { Conferencia, Finalizacao, Pergunta } from "@/types";
 import { ConferenciaResumo } from "./ConferenciaResumo";
 import { IdentificacaoForm } from "./IdentificacaoForm";
@@ -18,10 +18,10 @@ interface Props {
   consentimento: string;
   identificacao: {
     instrucao: string;
-    rascunho: RascunhoIdentificacao;
-    onMudar: (parcial: Partial<RascunhoIdentificacao>) => void;
+    cpf: string;
+    onMudar: (cpf: string) => void;
     erro: string | null;
-    onEnviar: (nome: string, cpf: string) => void;
+    onEnviar: () => void;
   };
   conferencia: {
     resumo: Conferencia | null;
@@ -94,10 +94,10 @@ export function TriagemPanel({ fase, pergunta, finalizacao, carregando, libras, 
             </button>)}
           </div> : <IntensityScale key={pergunta.id} pergunta={pergunta} carregando={carregando} onResponder={onResponder} />}
         </>}
-        {fase === "identificacao" && <IdentificacaoForm {...identificacao} carregando={carregando} libras={libras} />}
+        {fase === "identificacao" && <IdentificacaoForm {...identificacao} carregando={carregando} />}
         {fase === "conferencia" && conferencia.resumo && <ConferenciaResumo
           conferencia={conferencia.resumo}
-          identificacao={identificacao.rascunho}
+          cpf={identificacao.cpf}
           carregando={carregando}
           libras={libras}
           onConfirmar={conferencia.onConfirmar}

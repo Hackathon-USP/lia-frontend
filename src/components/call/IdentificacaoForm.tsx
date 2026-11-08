@@ -1,101 +1,87 @@
 import type { FormEvent } from "react";
-import type { RascunhoIdentificacao } from "@/hooks/useTriagem";
 import { cpfDigitos } from "@/lib/triagem/cpf";
-import { primaryButton } from "./styles";
+import { optionButton, primaryButton } from "./styles";
 
-const campo =
-  "min-h-16 w-full rounded-2xl border-2 border-white/30 bg-white px-5 text-2xl text-tinta placeholder:text-tinta-suave/70 focus-visible:border-ambar focus-visible:outline-3 focus-visible:outline-ambar aria-invalid:border-red-400";
+const tecla = `${optionButton} !min-h-14 min-w-0 !px-1 !py-2 @sm:!min-h-16`;
 
 interface Props {
-  /** Pedido da LIA ("Agora digite seu nome completo e seu CPF na tela.") */
   instrucao: string;
-  /** Nome e CPF preenchidos até agora (digitados, falados ou soletrados em Libras) */
-  rascunho: RascunhoIdentificacao;
-  onMudar: (parcial: Partial<RascunhoIdentificacao>) => void;
-  /** Nome ou CPF recusado (a LIA também explica em Libras) */
+  cpf: string;
+  onMudar: (cpf: string) => void;
   erro: string | null;
   carregando: boolean;
-  /** Atendimento em Libras: a dica fala em soletrar */
-  libras: boolean;
-  onEnviar: (nome: string, cpf: string) => void;
+  onEnviar: () => void;
 }
 
-/**
- * Último passo antes da senha: nome completo e CPF (o back exige para finalizar).
- * Os campos são preenchidos pelo teclado ou, de fora, pela voz e pela Libras (useTriagem.entrada).
- */
-export function IdentificacaoForm({ instrucao, rascunho, onMudar, erro, carregando, libras, onEnviar }: Props) {
-  const { nome, cpf } = rascunho;
-  const completo = nome.trim().length > 0 && cpfDigitos(cpf).length === 11;
+export function IdentificacaoForm({ instrucao, cpf, onMudar, erro, carregando, onEnviar }: Props) {
+  const digitos = cpfDigitos(cpf);
+  const completo = digitos.length === 11;
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (completo && !carregando) onEnviar(nome, cpf);
+    if (completo && !carregando) onEnviar();
   }
 
   return (
-    <form onSubmit={handleSubmit} noValidate className="space-y-5">
+    <form onSubmit={handleSubmit} noValidate className="mx-auto max-w-md space-y-3">
       <div>
-        <p className="mb-2 text-base font-bold uppercase tracking-wider text-ambar">Quase pronto</p>
-        <h2 className="text-2xl font-bold leading-snug sm:text-3xl">{instrucao}</h2>
+        <p className="mb-1 text-base font-bold uppercase tracking-wider text-ambar">Quase pronto</p>
+        <h2 className="text-2xl font-bold leading-snug @sm:text-3xl">{instrucao}</h2>
       </div>
 
-      <ul aria-label="Outras formas de responder" className="space-y-1 rounded-2xl bg-white/10 px-5 py-3 text-lg">
-        <li>
-          <span className="font-bold text-ambar">Falar:</span> “Meu nome é…” e depois os números do CPF, um por um.
-        </li>
-        {libras && (
-          <li>
-            <span className="font-bold text-ambar">Libras:</span> soletre o nome e abaixe as mãos para enviar.
-          </li>
-        )}
-        <li>
-          <span className="font-bold text-ambar">Confirmar:</span> diga “sim” ou toque no botão.
-        </li>
-      </ul>
-
-      <div className="space-y-2">
-        <label htmlFor="ident-nome" className="block text-xl font-semibold">Nome completo</label>
-        <input
-          id="ident-nome"
-          value={nome}
-          onChange={(e) => onMudar({ nome: e.target.value })}
-          autoComplete="off"
-          autoCapitalize="words"
-          enterKeyHint="next"
-          maxLength={120}
-          aria-invalid={!!erro && /nome/i.test(erro)}
-          aria-describedby={erro ? "ident-erro" : undefined}
-          className={campo}
-        />
-      </div>
-
-      <div className="space-y-2">
-        <label htmlFor="ident-cpf" className="block text-xl font-semibold">CPF</label>
+      <div className="space-y-1">
+        <label htmlFor="ident-cpf" className="block font-semibold">CPF</label>
         <input
           id="ident-cpf"
           value={cpf}
-          onChange={(e) => onMudar({ cpf: e.target.value })}
-          inputMode="numeric"
+          onChange={(e) => onMudar(e.target.value)}
+          inputMode="none"
           autoComplete="off"
-          enterKeyHint="send"
           placeholder="000.000.000-00"
-          aria-invalid={!!erro && /cpf/i.test(erro)}
+          disabled={carregando}
+          aria-invalid={!!erro}
           aria-describedby={erro ? "ident-erro" : undefined}
-          className={`${campo} tracking-wider tabular-nums`}
+          className="min-h-14 w-full rounded-2xl border-2 border-white/30 bg-white px-2 text-center text-2xl font-bold text-tinta tabular-nums placeholder:text-tinta-suave/70 focus-visible:outline-3 focus-visible:outline-ambar aria-invalid:border-red-400 @sm:text-3xl"
         />
       </div>
 
+      <div role="group" aria-label="Teclado numérico" className="grid grid-cols-3 gap-2">
+        {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((numero) => (
+          <button
+            key={numero}
+            type="button"
+            disabled={completo || carregando}
+            onClick={() => onMudar(`${digitos}${numero}`)}
+            className={`${tecla} !text-3xl`}
+          >
+            {numero}
+          </button>
+        ))}
+        <button type="button" disabled={!digitos || carregando} onClick={() => onMudar("")}
+          className={`${tecla} !text-sm`}>
+          Limpar
+        </button>
+        <button type="button" disabled={completo || carregando} onClick={() => onMudar(`${digitos}0`)}
+          className={`${tecla} !text-3xl`}>
+          0
+        </button>
+        <button type="button" disabled={!digitos || carregando} onClick={() => onMudar(digitos.slice(0, -1))}
+          aria-label="Apagar último dígito" className={tecla}>
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mx-auto size-6">
+            <path d="M3 12l6-7h11a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H9l-6-7zM11 9l6 6m0-6-6 6" />
+          </svg>
+        </button>
+      </div>
+
       {erro && (
-        <p id="ident-erro" role="alert" className="rounded-2xl bg-red-700 px-4 py-3 text-lg text-white">
+        <p id="ident-erro" role="alert" className="rounded-2xl bg-red-700 px-4 py-3 text-white">
           {erro}
         </p>
       )}
 
       <button type="submit" disabled={!completo || carregando} className={`${primaryButton} w-full`}>
-        {carregando ? "Enviando…" : "Confirmar e revisar respostas"}
+        {carregando ? "Enviando…" : "Confirmar CPF"}
       </button>
-      <p className="text-base text-white/80">Seus dados ficam só com a equipe da unidade.</p>
     </form>
   );
 }
