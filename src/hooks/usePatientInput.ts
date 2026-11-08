@@ -22,6 +22,11 @@ export interface PatientInputOptions {
   training: boolean;
   /** Esperando o back responder */
   busy: boolean;
+  /**
+   * O paciente está ditando dados (nome e CPF): a fala vai para o formulário
+   * mesmo com o modo intérprete ligado.
+   */
+  dictating?: boolean;
   camera: {
     videoRef: RefObject<HTMLVideoElement | null>;
     overlayRef: RefObject<HTMLCanvasElement | null>;
@@ -32,7 +37,7 @@ export interface PatientInputOptions {
   onCommand: (text: string, canal: ModoAcessibilidade) => void;
 }
 
-export function usePatientInput({ active, training, busy, camera, lia, onCommand }: PatientInputOptions) {
+export function usePatientInput({ active, training, busy, dictating = false, camera, lia, onCommand }: PatientInputOptions) {
   /** Última coisa que o paciente disse, sinalizou, digitou ou tocou */
   const [userCaption, setUserCaption] = useState("");
   /** Modo intérprete: o que a LIA ouve no microfone ela passa para Libras (sem responder a triagem). */
@@ -44,7 +49,7 @@ export function usePatientInput({ active, training, busy, camera, lia, onCommand
     if (canal === "libras" && busy) return;
     markActivity();
     setUserCaption(command);
-    if (interprete && canal === "voz") {
+    if (interprete && canal === "voz" && !dictating) {
       // Intérprete: a fala vira Libras no avatar, com a legenda em português.
       void lia.say(command, { voice: false });
       return;

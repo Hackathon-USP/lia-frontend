@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { RESTART_AFTER_END_MS } from "@/config/totem";
-import type { FaseTriagem } from "@/hooks/useTriagem";
+import type { FaseTriagem, RascunhoIdentificacao } from "@/hooks/useTriagem";
 import type { Finalizacao, Pergunta } from "@/types";
 import { IdentificacaoForm } from "./IdentificacaoForm";
 import { ResetCountdown } from "./ResetCountdown";
@@ -15,7 +15,13 @@ interface Props {
   carregando: boolean;
   libras: boolean;
   consentimento: string;
-  identificacao: { instrucao: string; erro: string | null; onEnviar: (nome: string, cpf: string) => void };
+  identificacao: {
+    instrucao: string;
+    rascunho: RascunhoIdentificacao;
+    onMudar: (parcial: Partial<RascunhoIdentificacao>) => void;
+    erro: string | null;
+    onEnviar: (nome: string, cpf: string) => void;
+  };
   onConsentir: (aceita: boolean) => void;
   onResponder: (valor: string | number, rotulo: string) => void;
   onRecomecar: () => void;
@@ -72,7 +78,7 @@ export function TriagemPanel({ fase, pergunta, finalizacao, carregando, libras, 
             </button>)}
           </div> : <IntensityScale key={pergunta.id} pergunta={pergunta} carregando={carregando} onResponder={onResponder} />}
         </>}
-        {fase === "identificacao" && <IdentificacaoForm {...identificacao} carregando={carregando} />}
+        {fase === "identificacao" && <IdentificacaoForm {...identificacao} carregando={carregando} libras={libras} />}
         {fase === "finalizado" && finalizacao &&<div className="space-y-6 text-center">
           <div className="rounded-3xl bg-white p-6 text-tinta shadow-lg sm:p-10">
             <h2 className="text-2xl font-bold">Sua senha de atendimento</h2>

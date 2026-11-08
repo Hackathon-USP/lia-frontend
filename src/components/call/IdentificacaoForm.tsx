@@ -1,5 +1,6 @@
-import { useState, type FormEvent } from "react";
-import { cpfDigitos, formatarCpf } from "@/lib/triagem/cpf";
+import type { FormEvent } from "react";
+import type { RascunhoIdentificacao } from "@/hooks/useTriagem";
+import { cpfDigitos } from "@/lib/triagem/cpf";
 import { primaryButton } from "./styles";
 
 const campo =
@@ -8,16 +9,23 @@ const campo =
 interface Props {
   /** Pedido da LIA ("Agora digite seu nome completo e seu CPF na tela.") */
   instrucao: string;
+  /** Nome e CPF preenchidos até agora (digitados, falados ou soletrados em Libras) */
+  rascunho: RascunhoIdentificacao;
+  onMudar: (parcial: Partial<RascunhoIdentificacao>) => void;
   /** Nome ou CPF recusado (a LIA também explica em Libras) */
   erro: string | null;
   carregando: boolean;
+  /** Atendimento em Libras: a dica fala em soletrar */
+  libras: boolean;
   onEnviar: (nome: string, cpf: string) => void;
 }
 
-/** Último passo antes da senha: nome completo e CPF (o back exige para finalizar). */
-export function IdentificacaoForm({ instrucao, erro, carregando, onEnviar }: Props) {
-  const [nome, setNome] = useState("");
-  const [cpf, setCpf] = useState("");
+/**
+ * Último passo antes da senha: nome completo e CPF (o back exige para finalizar).
+ * Os campos são preenchidos pelo teclado ou, de fora, pela voz e pela Libras (useTriagem.entrada).
+ */
+export function IdentificacaoForm({ instrucao, rascunho, onMudar, erro, carregando, libras, onEnviar }: Props) {
+  const { nome, cpf } = rascunho;
   const completo = nome.trim().length > 0 && cpfDigitos(cpf).length === 11;
 
   function handleSubmit(e: FormEvent) {
@@ -32,13 +40,26 @@ export function IdentificacaoForm({ instrucao, erro, carregando, onEnviar }: Pro
         <h2 className="text-2xl font-bold leading-snug sm:text-3xl">{instrucao}</h2>
       </div>
 
+      <ul aria-label="Outras formas de responder" className="space-y-1 rounded-2xl bg-white/10 px-5 py-3 text-lg">
+        <li>
+          <span className="font-bold text-ambar">Falar:</span> “Meu nome é…” e depois os números do CPF, um por um.
+        </li>
+        {libras && (
+          <li>
+            <span className="font-bold text-ambar">Libras:</span> soletre o nome e abaixe as mãos para enviar.
+          </li>
+        )}
+        <li>
+          <span className="font-bold text-ambar">Confirmar:</span> diga “sim” ou toque no botão.
+        </li>
+      </ul>
+
       <div className="space-y-2">
         <label htmlFor="ident-nome" className="block text-xl font-semibold">Nome completo</label>
         <input
           id="ident-nome"
-          autoFocus
           value={nome}
-          onChange={(e) => setNome(e.target.value)}
+          onChange={(e) => onMudar({ nome: e.target.value })}
           autoComplete="off"
           autoCapitalize="words"
           enterKeyHint="next"
@@ -54,7 +75,7 @@ export function IdentificacaoForm({ instrucao, erro, carregando, onEnviar }: Pro
         <input
           id="ident-cpf"
           value={cpf}
-          onChange={(e) => setCpf(formatarCpf(e.target.value))}
+          onChange={(e) => onMudar({ cpf: e.target.value })}
           inputMode="numeric"
           autoComplete="off"
           enterKeyHint="send"

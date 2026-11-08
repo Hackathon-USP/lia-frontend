@@ -39,6 +39,7 @@ export function CallScreen({ modo = "libras", active = true, onEnd }: Props) {
     active,
     training: trainerOpen,
     busy: triagem.carregando,
+    dictating: triagem.fase === "identificacao",
     camera: { videoRef, overlayRef, on: cameraOn },
     lia,
     onCommand: (text, canal) => void triagem.entrada(text, canal),
@@ -55,6 +56,12 @@ export function CallScreen({ modo = "libras", active = true, onEnd }: Props) {
     if (active) void triagem.comecar();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- sessão muda apenas ao entrar/sair do atendimento
   }, [active]);
+
+  // Nome se soletra: na identificação a leitura das mãos já começa em datilologia.
+  const { setMode: setSignMode } = input.signs;
+  useEffect(() => {
+    if (triagem.fase === "identificacao") setSignMode("datilologia");
+  }, [triagem.fase, setSignMode]);
 
   useEffect(() => {
     if (active && modo === "libras") void startCamera();
@@ -74,7 +81,7 @@ export function CallScreen({ modo = "libras", active = true, onEnd }: Props) {
       <div className={`totem-content grid flex-1 ${layout}`}>
         <AvatarStage
           lia={lia}
-          status={liaStatusLabel({ ...lia.player, listening: ouvido.listening, interprete: input.interprete })}
+          status={liaStatusLabel({ ...lia.player, listening: ouvido.listening, interprete: input.interprete && triagem.fase !== "identificacao" })}
           pipSide={pipSide}
           hidden={completed && !libras}
           hideCaption={triagem.carregando}
@@ -101,6 +108,8 @@ export function CallScreen({ modo = "libras", active = true, onEnd }: Props) {
             consentimento={triagem.consentimento}
             identificacao={{
               instrucao: triagem.textoIdentificacao,
+              rascunho: triagem.rascunho,
+              onMudar: triagem.mudarRascunho,
               erro: triagem.erroIdentificacao,
               onEnviar: (nome, cpf) => void triagem.identificar(nome, cpf),
             }}
@@ -124,8 +133,7 @@ export function CallScreen({ modo = "libras", active = true, onEnd }: Props) {
         </div>
       </div>
 
-      {/* Na identificação o nome e o CPF são digitados: a frase em Libras não é usada. */}
-      {!completed && libras && triagem.fase !== "identificacao" && <PhraseBar signs={signs} busy={triagem.carregando} />}
+      {!completed && libras && <PhraseBar signs={signs} busy={triagem.carregando} />}
 
       <footer className="sticky bottom-0 z-30 shrink-0 border-t border-white/15 bg-tinta px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6">
         {!completed && (

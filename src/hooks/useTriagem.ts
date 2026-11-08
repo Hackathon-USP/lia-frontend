@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { clearSavedSession, readSavedSession, RESTART_AFTER_END_MS, saveSession } from "@/config/totem";
-import { cpfValido } from "@/lib/triagem/cpf";
+import { cpfDigitos, cpfValido, formatarCpf } from "@/lib/triagem/cpf";
+import { interpretarIdentificacao } from "@/lib/triagem/identificacao";
 import { interpretarEntrada, simOuNao } from "@/lib/triagem/interpretar";
 import {
   acordarBack,
@@ -40,8 +41,27 @@ const TEXTOS_PADRAO: TextosTotem = {
 /** A partir desse tempo esperando o back, avisa que está demorando. */
 const LENTO_MS = 4000;
 
-const NOME_INCOMPLETO = "Digite seu nome completo, com sobrenome.";
-const CPF_INVALIDO = "Esse CPF não está certo. Confira os números e tente de novo.";
+/* Falas da LIA na identificação (ela sinaliza em Libras e fala). O CPF nunca é lido em voz alta. */
+const IDENT = {
+  comoResponder: "Você pode digitar, falar ou soletrar em Libras.",
+  nomeIncompleto: "Preciso do seu nome completo, com sobrenome.",
+  cpfInvalido: "Esse CPF não está certo. Confira os números e tente de novo.",
+  nomeAnotado: (nome: string) => `Anotei seu nome: ${nome}.`,
+  pedirCpf: "Agora diga seu CPF, número por número.",
+  faltamNumeros: (n: number) => `Anotei. Faltam ${n} números do CPF.`,
+  cpfAnotado: "Anotei seu CPF. Confira na tela.",
+  confirmar: "Se estiver tudo certo, diga sim ou toque em confirmar.",
+  pedirNome: "Agora diga ou soletre seu nome completo.",
+  podeFalarNome: "Pode sim. Diga seu nome completo agora, ou soletre em Libras.",
+  apagado: (campo: string) => `Apaguei ${campo}. Pode dizer de novo.`,
+};
+
+export interface RascunhoIdentificacao {
+  nome: string;
+  /** Com máscara, como aparece na tela */
+  cpf: string;
+}
+const RASCUNHO_VAZIO: RascunhoIdentificacao = { nome: "", cpf: "" };
 
 export interface UseTriagemOptions {
   /** Faz a LIA sinalizar (e legendar) um texto. */
@@ -60,6 +80,9 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
   /** Nome ou CPF recusado (fica junto do formulário, sem "Tentar de novo") */
   const [erroIdentificacao, setErroIdentificacao] = useState<string | null>(null);
   const [textos, setTextos] = useState<TextosTotem>(TEXTOS_PADRAO);
+  /** Nome e CPF sendo preenchidos (por toque, voz ou Libras) */
+  const [rascunho, setRascunho] = useState<RascunhoIdentificacao>(RASCUNHO_VAZIO);
+  const rascunhoRef = useRef<RascunhoIdentificacao>(RASCUNHO_VAZIO);
 
   const falarRef = useRef(falar);
   const textosRef = useRef<TextosTotem>(TEXTOS_PADRAO);
@@ -85,6 +108,13 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
   const mudarFase = useCallback((f: FaseTriagem) => {
     faseRef.current = f;
     setFase(f);
+  }, []);
+  /** Atualiza nome e/ou CPF do formulário (o CPF sempre com máscara). */
+  const mudarRascunho = useCallback((parcial: Partial<RascunhoIdentificacao>) => {
+    const novo = { ...rascunhoRef.current, ...parcial };
+    novo.cpf = formatarCpf(novo.cpf);
+    rascunhoRef.current = novo;
+    setRascunho(novo);
   }, []);
   const mudarPergunta = useCallback((p: Pergunta | null) => {
     perguntaRef.current = p;
@@ -130,7 +160,7 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
     mudarPergunta(null);
     setErroIdentificacao(null);
     mudarFase("identificacao");
-    falarRef.current(textosRef.current.identificacao);
+    falarRef.current(`${textosRef.current.identificacao} ${IDENT.comoResponder}`);
   }, [mudarFase, mudarPergunta]);
 
   const finalizar = useCallback(
@@ -187,8 +217,8 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
       const at = atendimentoRef.current;
       if (!at || faseRef.current !== "identificacao") return;
       const nomeLimpo = nome.trim().replace(/\s+/g, " ");
-      if (nomeLimpo.split(" ").length < 2) return recusarIdentificacao(NOME_INCOMPLETO);
-      if (!cpfValido(cpf)) return recusarIdentificacao(CPF_INVALIDO);
+      if (nomeLimpo.split(" ").length < 2) return recusarIdentificacao(IDENT.nomeIncompleto);
+      if (!cpfValido(cpf)) return recusarIdentificacao(IDENT.cpfInvalido);
       setErroIdentificacao(null);
       const res = await chamar(
         () => identificarPaciente(at.id, { nome: nomeLimpo, cpf }),
@@ -203,10 +233,62 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
     [chamar, finalizar, recusarIdentificacao],
   );
 
+  /**
+   * Nome ou CPF dito no microfone, sinalizado em Libras (nome soletrado) ou digitado no campo livre.
+   * Preenche o formulário e a LIA confirma o que anotou e diz o próximo passo.
+   */
+  const ditarIdentificacao = useCallback(
+    async (frase: string) => {
+      const e = interpretarIdentificacao(frase);
+      const { nome, cpf } = rascunhoRef.current;
+      const cpfCompleto = (c: string) => cpfDigitos(c).length === 11;
+      const proximo = (n: string, c: string) => (!n ? IDENT.pedirNome : !cpfCompleto(c) ? IDENT.pedirCpf : IDENT.confirmar);
+      setErroIdentificacao(null);
+
+      if (!e) {
+        falarRef.current(textosRef.current.repetir);
+        return;
+      }
+      if (e.tipo === "nome") {
+        mudarRascunho({ nome: e.nome });
+        falarRef.current(`${IDENT.nomeAnotado(e.nome)} ${proximo(e.nome, cpf)}`);
+        return;
+      }
+      if (e.tipo === "cpf") {
+        // Ditado em partes: completa o que já tem; se já estava completo, recomeça.
+        const atual = cpfCompleto(cpf) ? "" : cpfDigitos(cpf);
+        const novo = (atual + e.digitos).slice(0, 11);
+        mudarRascunho({ cpf: novo });
+        if (novo.length < 11) falarRef.current(IDENT.faltamNumeros(11 - novo.length));
+        else if (!cpfValido(novo)) recusarIdentificacao(IDENT.cpfInvalido);
+        else falarRef.current(`${IDENT.cpfAnotado} ${proximo(nome, novo)}`);
+        return;
+      }
+      if (e.tipo === "ajuda") {
+        falarRef.current(e.campo === "cpf" ? IDENT.pedirCpf : IDENT.podeFalarNome);
+        return;
+      }
+      if (e.tipo === "apagar") {
+        const campo = e.campo ?? (cpf ? "cpf" : "nome");
+        mudarRascunho(campo === "cpf" ? { cpf: "" } : { nome: "" });
+        falarRef.current(IDENT.apagado(campo === "cpf" ? "o CPF" : "o nome"));
+        return;
+      }
+      // Confirmar
+      if (!nome || !cpfCompleto(cpf)) {
+        falarRef.current(proximo(nome, cpf));
+        return;
+      }
+      await identificar(nome, cpf);
+    },
+    [identificar, mudarRascunho, recusarIdentificacao],
+  );
+
   const comecar = useCallback(async () => {
     const requestGeneration = generation.current;
     setErro(null);
     setFinalizacao(null);
+    mudarRascunho(RASCUNHO_VAZIO);
     mudarPergunta(null);
     mudarFase("conectando");
 
@@ -228,7 +310,7 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
     setTextos(textosRef.current);
     mudarFase("consentimento");
     falarRef.current(`${textosRef.current.boas_vindas} ${textosRef.current.consentimento}`);
-  }, [aplicar, chamar, mudarFase, mudarPergunta]);
+  }, [aplicar, chamar, mudarFase, mudarPergunta, mudarRascunho]);
 
   const consentir = useCallback(
     async (aceita: boolean) => {
@@ -272,11 +354,15 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
         else falarRef.current(textosRef.current.repetir);
         return;
       }
+      if (faseRef.current === "identificacao") {
+        await ditarIdentificacao(texto);
+        return;
+      }
       const p = perguntaRef.current;
       if (faseRef.current !== "pergunta" || !p) return;
       await responderPergunta(interpretarEntrada(p, texto, canal), canal);
     },
-    [consentir, responderPergunta],
+    [consentir, ditarIdentificacao, responderPergunta],
   );
 
   useEffect(() => {
@@ -301,9 +387,10 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
     setFinalizacao(null);
     setErro(null);
     setErroIdentificacao(null);
+    mudarRascunho(RASCUNHO_VAZIO);
     setLento(false);
     setCarregando(false);
-  }, [mudarFase, mudarPergunta]);
+  }, [mudarFase, mudarPergunta, mudarRascunho]);
 
   const recomecar = useCallback(() => {
     clearSavedSession();
@@ -332,6 +419,8 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
     consentimento: textos.consentimento,
     textoIdentificacao: textos.identificacao,
     erroIdentificacao,
+    rascunho,
+    mudarRascunho,
     identificar,
     limpar,
     pergunta,
