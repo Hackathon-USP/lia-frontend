@@ -6,6 +6,8 @@ export const ROUTES = {
   home: "/",
   chat: "/chat",
   sobre: "/sobre",
+  /** Tela do guichê (não linkar no site: ainda sem autenticação) */
+  recepcao: "/recepcao",
 } as const;
 
 export type AppRoute = (typeof ROUTES)[keyof typeof ROUTES];

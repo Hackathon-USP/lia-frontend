@@ -24,8 +24,10 @@ export interface Atendimento {
   status: "em_andamento" | "finalizado";
   respostas: Record<string, unknown>;
   canais: Record<string, string>;
-  /** null = triagem terminou, pode finalizar */
+  /** null = triagem terminou (falta identificar, se ainda não identificado, e finalizar) */
   proxima_pergunta: Pergunta | null;
+  /** Nome e CPF já informados (o /finalizar exige) */
+  identificado?: boolean;
   /** true = não entendeu a resposta, nada foi gravado */
   repetir: boolean;
   mensagem: string | null;
@@ -41,11 +43,23 @@ export interface Resposta {
   confianca?: number;
 }
 
+/** PUT /atendimentos/{id}/identificacao */
+export interface Identificacao {
+  nome: string;
+  /** Com ou sem máscara */
+  cpf: string;
+}
+
+export type TipoSenha = "normal" | "preferencial";
+export type StatusSenha = "aguardando" | "em_atendimento" | "finalizada";
+export type StatusAtendimento = "em_andamento" | "finalizado";
+
 export interface Senha {
   codigo: string;
-  tipo: "normal" | "preferencial";
+  tipo: TipoSenha;
   numero: number;
-  status: "aguardando" | "em_atendimento" | "finalizada";
+  status: StatusSenha;
+  /** ISO em UTC */
   criada_em: string;
 }
 
@@ -61,6 +75,7 @@ export interface TextosTotem {
   escolher_modo: string;
   consentimento: string;
   consentimento_recusado: string;
+  identificacao: string;
   repetir: string;
   finalizado: string;
   finalizado_preferencial: string;

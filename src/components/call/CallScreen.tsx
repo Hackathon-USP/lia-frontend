@@ -99,6 +99,11 @@ export function CallScreen({ modo = "libras", active = true, onEnd }: Props) {
             key={triagem.fase}
             libras={libras}
             consentimento={triagem.consentimento}
+            identificacao={{
+              instrucao: triagem.textoIdentificacao,
+              erro: triagem.erroIdentificacao,
+              onEnviar: (nome, cpf) => void triagem.identificar(nome, cpf),
+            }}
             fase={triagem.fase}
             pergunta={triagem.pergunta}
             finalizacao={triagem.finalizacao}
@@ -119,7 +124,8 @@ export function CallScreen({ modo = "libras", active = true, onEnd }: Props) {
         </div>
       </div>
 
-      {!completed && libras && <PhraseBar signs={signs} busy={triagem.carregando} />}
+      {/* Na identificação o nome e o CPF são digitados: a frase em Libras não é usada. */}
+      {!completed && libras && triagem.fase !== "identificacao" && <PhraseBar signs={signs} busy={triagem.carregando} />}
 
       <footer className="sticky bottom-0 z-30 shrink-0 border-t border-white/15 bg-tinta px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6">
         {!completed && (

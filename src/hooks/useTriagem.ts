@@ -1,33 +1,37 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { clearSavedSession, readSavedSession, RESTART_AFTER_END_MS, saveSession } from "@/config/totem";
+import { cpfValido } from "@/lib/triagem/cpf";
 import { interpretarEntrada, simOuNao } from "@/lib/triagem/interpretar";
 import {
   acordarBack,
   buscarTextos,
   consultarAtendimento,
   finalizarAtendimento,
+  identificarPaciente,
   iniciarAtendimento,
   mensagemDeErro,
   responder,
 } from "@/services";
-import type { Atendimento, Finalizacao, ModoAcessibilidade, Pergunta, TextosTotem } from "@/types";
+import { ApiError, type Atendimento, type Finalizacao, type ModoAcessibilidade, type Pergunta, type TextosTotem } from "@/types";
 
 /*
  * Fluxo da tela do paciente no back da LIA:
  *   boas-vindas + consentimento → POST /atendimentos → pergunta → POST /respostas → … →
- *   (proxima_pergunta = null) → POST /finalizar → senha.
- * A cada passo a LIA sinaliza o texto (falar) e a tela mostra as opções para tocar.
+ *   (proxima_pergunta = null) → nome e CPF (PUT /identificacao) → POST /finalizar → senha.
+ * A cada passo a LIA sinaliza o texto em Libras (falar) e a tela mostra as opções para tocar.
+ * Avisos de erro do paciente (CPF inválido etc.) também passam pela LIA, para quem não lê português.
  */
 
-export type FaseTriagem = "conectando" | "consentimento" | "pergunta" | "finalizado" | "recusado";
+export type FaseTriagem = "conectando" | "consentimento" | "pergunta" | "identificacao" | "finalizado" | "recusado";
 
 /** Usados se o back não responder /conteudo/textos (mesmos textos do back). */
 const TEXTOS_PADRAO: TextosTotem = {
   boas_vindas: "Olá! Bem-vindo. Vou ajudar você a pegar sua senha de atendimento.",
   escolher_modo: "Como você prefere se comunicar? Libras, voz ou toque na tela.",
   consentimento:
-    "Para continuar, vamos guardar algumas informações sobre o motivo da sua vinda, só para a equipe de saúde atender você. Não gravamos vídeo nem áudio. Você concorda?",
+    "Para continuar, vamos guardar algumas informações sobre o motivo da sua vinda, além do seu nome e CPF, só para a equipe de saúde atender você. Não gravamos vídeo nem áudio. Você concorda?",
   consentimento_recusado: "Tudo bem. Procure a recepção para ser atendido pessoalmente.",
+  identificacao: "Agora digite seu nome completo e seu CPF na tela.",
   repetir: "Não entendi. Pode repetir ou tocar na opção na tela?",
   finalizado: "Pronto! Sua senha é {senha}. Aguarde ser chamado.",
   finalizado_preferencial: "Pronto! Sua senha é {senha}, de atendimento prioritário. Aguarde ser chamado.",
@@ -35,6 +39,9 @@ const TEXTOS_PADRAO: TextosTotem = {
 
 /** A partir desse tempo esperando o back, avisa que está demorando. */
 const LENTO_MS = 4000;
+
+const NOME_INCOMPLETO = "Digite seu nome completo, com sobrenome.";
+const CPF_INVALIDO = "Esse CPF não está certo. Confira os números e tente de novo.";
 
 export interface UseTriagemOptions {
   /** Faz a LIA sinalizar (e legendar) um texto. */
@@ -50,7 +57,9 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
   const [carregando, setCarregando] = useState(false);
   const [lento, setLento] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
-  const [consentimento, setConsentimento] = useState(TEXTOS_PADRAO.consentimento);
+  /** Nome ou CPF recusado (fica junto do formulário, sem "Tentar de novo") */
+  const [erroIdentificacao, setErroIdentificacao] = useState<string | null>(null);
+  const [textos, setTextos] = useState<TextosTotem>(TEXTOS_PADRAO);
 
   const falarRef = useRef(falar);
   const textosRef = useRef<TextosTotem>(TEXTOS_PADRAO);
@@ -66,6 +75,7 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
     comecar: () => Promise<void>;
     consentir: (aceita: boolean) => Promise<void>;
     responderPergunta: (valor: string | number, canal: ModoAcessibilidade, confianca?: number) => Promise<void>;
+    identificar: (nome: string, cpf: string) => Promise<void>;
   } | null>(null);
 
   useEffect(() => {
@@ -81,8 +91,15 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
     setPergunta(p);
   }, []);
 
-  /** Executa uma chamada ao back com "carregando", aviso de lentidão e erro amigável. */
-  const chamar = useCallback(async <T,>(fn: () => Promise<T>, refazer: () => Promise<void>): Promise<T | undefined> => {
+  /**
+   * Executa uma chamada ao back com "carregando", aviso de lentidão e erro amigável.
+   * `tratar` cuida de erros esperados (ex.: 422, 409); se devolver true, não vira o erro com "Tentar de novo".
+   */
+  const chamar = useCallback(async <T,>(
+    fn: () => Promise<T>,
+    refazer: () => Promise<void>,
+    tratar?: (err: unknown) => boolean,
+  ): Promise<T | undefined> => {
     if (ocupado.current) return undefined;
     const requestGeneration = generation.current;
     ocupado.current = true;
@@ -94,6 +111,7 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
       return requestGeneration === generation.current ? result : undefined;
     } catch (err) {
       if (requestGeneration !== generation.current) return undefined;
+      if (tratar?.(err)) return undefined;
       ultimaAcao.current = refazer;
       setErro(mensagemDeErro(err));
       return undefined;
@@ -107,9 +125,22 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
     }
   }, []);
 
+  /** Pede nome e CPF (a LIA sinaliza o pedido). */
+  const pedirIdentificacao = useCallback(() => {
+    mudarPergunta(null);
+    setErroIdentificacao(null);
+    mudarFase("identificacao");
+    falarRef.current(textosRef.current.identificacao);
+  }, [mudarFase, mudarPergunta]);
+
   const finalizar = useCallback(
     async (id: number) => {
-      const fim = await chamar(() => finalizarAtendimento(id), async () => acoes.current?.finalizar(id));
+      const fim = await chamar(
+        () => finalizarAtendimento(id),
+        async () => acoes.current?.finalizar(id),
+        // 409: o back ainda não tem nome e CPF.
+        (err) => err instanceof ApiError && err.status === 409 && (pedirIdentificacao(), true),
+      );
       if (!fim) return;
       clearSavedSession();
       atendimentoRef.current = null;
@@ -118,10 +149,10 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
       mudarFase("finalizado");
       falarRef.current(fim.mensagem_final);
     },
-    [chamar, mudarFase, mudarPergunta],
+    [chamar, mudarFase, mudarPergunta, pedirIdentificacao],
   );
 
-  /** Aplica a resposta do back: repetir, próxima pergunta ou finalizar. */
+  /** Aplica a resposta do back: repetir, próxima pergunta, identificação ou finalizar. */
   const aplicar = useCallback(
     async (at: Atendimento) => {
       atendimentoRef.current = at;
@@ -135,9 +166,41 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
         falarRef.current(at.proxima_pergunta.texto);
         return;
       }
+      if (at.identificado === false) {
+        pedirIdentificacao();
+        return;
+      }
       await finalizar(at.id);
     },
-    [finalizar, mudarFase, mudarPergunta],
+    [finalizar, mudarFase, mudarPergunta, pedirIdentificacao],
+  );
+
+  /** Mostra o problema no formulário e a LIA explica (em Libras e voz). */
+  const recusarIdentificacao = useCallback((mensagem: string) => {
+    setErroIdentificacao(mensagem);
+    falarRef.current(mensagem);
+  }, []);
+
+  /** Nome e CPF digitados → back → senha. */
+  const identificar = useCallback(
+    async (nome: string, cpf: string) => {
+      const at = atendimentoRef.current;
+      if (!at || faseRef.current !== "identificacao") return;
+      const nomeLimpo = nome.trim().replace(/\s+/g, " ");
+      if (nomeLimpo.split(" ").length < 2) return recusarIdentificacao(NOME_INCOMPLETO);
+      if (!cpfValido(cpf)) return recusarIdentificacao(CPF_INVALIDO);
+      setErroIdentificacao(null);
+      const res = await chamar(
+        () => identificarPaciente(at.id, { nome: nomeLimpo, cpf }),
+        async () => acoes.current?.identificar(nome, cpf),
+        // 422: o back recusou o nome ou o CPF.
+        (err) => err instanceof ApiError && err.status === 422 && (recusarIdentificacao(mensagemDeErro(err)), true),
+      );
+      if (!res) return;
+      atendimentoRef.current = res;
+      await finalizar(at.id);
+    },
+    [chamar, finalizar, recusarIdentificacao],
   );
 
   const comecar = useCallback(async () => {
@@ -159,10 +222,10 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
       clearSavedSession();
     }
 
-    const textos = await buscarTextos().catch(() => null);
+    const doBack = await buscarTextos().catch(() => null);
     if (requestGeneration !== generation.current) return;
-    if (textos) textosRef.current = { ...TEXTOS_PADRAO, ...textos };
-    setConsentimento(textosRef.current.consentimento);
+    if (doBack) textosRef.current = { ...TEXTOS_PADRAO, ...doBack };
+    setTextos(textosRef.current);
     mudarFase("consentimento");
     falarRef.current(`${textosRef.current.boas_vindas} ${textosRef.current.consentimento}`);
   }, [aplicar, chamar, mudarFase, mudarPergunta]);
@@ -217,7 +280,7 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
   );
 
   useEffect(() => {
-    acoes.current = { finalizar, comecar, consentir, responderPergunta };
+    acoes.current = { finalizar, comecar, consentir, responderPergunta, identificar };
   });
 
   const tentarDeNovo = useCallback(() => {
@@ -237,6 +300,7 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
     mudarFase("conectando");
     setFinalizacao(null);
     setErro(null);
+    setErroIdentificacao(null);
     setLento(false);
     setCarregando(false);
   }, [mudarFase, mudarPergunta]);
@@ -265,7 +329,10 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
 
   return {
     fase,
-    consentimento,
+    consentimento: textos.consentimento,
+    textoIdentificacao: textos.identificacao,
+    erroIdentificacao,
+    identificar,
     limpar,
     pergunta,
     finalizacao,
