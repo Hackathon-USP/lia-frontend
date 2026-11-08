@@ -30,11 +30,11 @@ export function CameraPip({
   const active = status === "active";
   const problem = !active && status !== "idle" && status !== "requesting";
   // Mesmo enquadramento no vídeo e no desenho das mãos (canvas também aceita object-fit).
-  const media = "aspect-[3/4] w-full -scale-x-100 object-cover sm:aspect-video";
+  const media = "aspect-video w-full -scale-x-100 object-cover sm:aspect-video";
 
   return (
     <figure
-      className={`absolute top-4 z-20 w-36 overflow-hidden rounded-2xl bg-black shadow-2xl ring-2 sm:top-6 sm:w-64 md:w-80 ${
+      className={`absolute top-4 z-20 w-36 overflow-hidden rounded-2xl bg-black shadow-2xl ring-2 sm:top-6 sm:w-40 md:w-44 ${
         handsVisible ? "ring-ambar" : "ring-white/25"
       } ${side === "right" ? "right-4 sm:right-6" : "left-4 sm:left-6"}`}
     >

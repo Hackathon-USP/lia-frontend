@@ -45,7 +45,12 @@ export function useVLibrasPlayer(avatar: VLibrasAvatar = "hosana") {
     [ready, send],
   );
 
-  const stop = useCallback(() => send("PlayerManager", "stopAll"), [send]);
+  const stop = useCallback(() => {
+    pendingGloss.current = null;
+    setPlaying(false);
+    setGlossIndex(-1);
+    send("PlayerManager", "stopAll");
+  }, [send]);
 
   useEffect(() => {
     const timers: ReturnType<typeof setTimeout>[] = [];
