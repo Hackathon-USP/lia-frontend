@@ -179,9 +179,9 @@ const FOUNDERS = [
     nome: "Matheus",
     papel: "Cofundador",
     frase: "Queremos escalar a LIA para diversos mercados.",
-    foto: "/assets/equipe/foto-pessoa.svg", // provisória: troque quando a foto chegar
-    enquadramento: "50% 50%",
-    zoom: 1,
+    foto: "/assets/equipe/matheus.jpg",
+    enquadramento: "46% 20%",
+    zoom: 3,
   },
 ];
 

@@ -101,7 +101,7 @@ export function LiaVitrine() {
 
         {!ready && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-6 text-center text-tinta">
-            <Image src="/assets/icon.jpeg" alt="" width={88} height={88} className="size-22 rounded-3xl shadow-lg motion-safe:animate-pulse" />
+            <Image src="/assets/favicon.png" alt="" width={88} height={88} className="size-22 drop-shadow-md motion-safe:animate-pulse" />
             {failed ? (
               <p role="alert" className="max-w-xs text-lg">O avatar não carregou agora. Tente recarregar a página.</p>
             ) : (
