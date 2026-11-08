@@ -18,7 +18,7 @@ import {
 } from "@/lib/libras";
 import { CAPTURE_PLAYER_PATH, VLibrasCapturePlayer, VLIBRAS_AVATARS, type VLibrasAvatar } from "@/lib/vlibras/capture-player";
 import { env } from "@/config/env";
-import { savedSignList } from "@/hooks/useSignRecognition";
+import { savedSignList, TOTEM_SEGMENTATION } from "@/hooks/useSignRecognition";
 import { enviarAmostras, resolveVLibrasGloss, resumoAmostras, type VLibrasGlossStatus } from "@/services";
 
 /*
@@ -33,7 +33,7 @@ import { enviarAmostras, resolveVLibrasGloss, resumoAmostras, type VLibrasGlossS
 const ALPHABET = parseAlphabet(alphabetFile).map((a) => a.letra);
 const SENT_KEY = "lia:vlibras:enviadas";
 /** Mesma segmentação do totem (useSignRecognition). */
-const SEGMENTATION = { stillMs: 300 };
+const SEGMENTATION = TOTEM_SEGMENTATION;
 /**
  * A mão que faz o sinal precisa aparecer em 80% dos quadros. O MediaPipe perde a mão do Guga com
  * frequência (a outra mão, parada na cintura, continua aparecendo): esses exemplos não entram.

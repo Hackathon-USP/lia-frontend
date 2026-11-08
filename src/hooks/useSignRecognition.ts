@@ -106,6 +106,20 @@ export type SignDiagnostic = {
   [K in DiagnosticName]: { type: K; data: LiaVisionEvents[K] };
 }[DiagnosticName];
 
+/**
+ * Segmentação do totem (também usada para preparar os exemplos do VLibras em /treinar).
+ * O padrão do motor pede mão a 0,8 largura de ombro/s por 2 quadros seguidos e 8 quadros no mínimo.
+ * Em notebook comum a leitura roda a ~10 quadros/s (foi assim nas gravações de teste), e com o padrão
+ * 2 de 6 sinais nem começavam e os outros perdiam o início. Com estes valores, os 6 foram reconhecidos.
+ */
+export const TOTEM_SEGMENTATION = {
+  stillMs: 300,
+  startSpeed: 0.5,
+  startFrames: 1,
+  preRollMs: 400,
+  minFrames: 5,
+} as const;
+
 let liaPromise: Promise<LiaVision> | null = null;
 
 /** Carrega o motor (MediaPipe + classificador) uma única vez por página. */
@@ -113,7 +127,7 @@ function loadLia() {
   liaPromise ??= createLiaVision({
     // Sem filtro de vocabulário: valem todos os sinais gravados (inclusive os que o totem aprende).
     alphabet: ALPHABET.map((a) => a.letra),
-    segmentation: { stillMs: 300 },
+    segmentation: TOTEM_SEGMENTATION,
     poseEveryNFrames: 2,
     liveGuessMs: 150,
     assets: {
@@ -386,10 +400,9 @@ export function useSignRecognition({ videoRef, overlayRef, enabled, onPhrase, ca
           sendRef.current();
         }
       }),
-      lia.on("signDiscarded", (e) => {
-        setGuess(null);
-        if (e.reason !== "retracao") flashMiss();
-      }),
+      // Trechos descartados (curtos, quase parados, mão voltando ao repouso) são ruído da câmera,
+      // não uma tentativa: "Não entendi" só aparece quando um sinal foi comparado e ficou abaixo do limiar.
+      lia.on("signDiscarded", () => setGuess(null)),
       lia.on("lowConfidence", (e) => {
         finishComparison(e.timestamp);
         setGuess(null);
