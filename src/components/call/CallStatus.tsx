@@ -25,7 +25,7 @@ export function CallStatus({ carregando, lento, erro, onTentarDeNovo, listenErro
     <div className="mx-auto flex min-h-20 w-full max-w-3xl flex-col justify-center gap-3 px-6 py-3" aria-live="polite">
       {/* "LIA está pensando" fica no indicador de vez; aqui só o aviso de demora. */}
       {carregando && lento && (
-        <p className="rounded-2xl bg-tinta/85 px-4 py-2 text-white">Conectando ao sistema da unidade… pode levar até 1 minuto.</p>
+        <p className="rounded-2xl bg-tinta/85 px-4 py-2 text-white">Só um instante… pode levar até 1 minuto.</p>
       )}
       {erro && (
         <p role="alert" className="flex flex-wrap items-center justify-center gap-3 rounded-2xl bg-red-700 px-4 py-2 text-white">

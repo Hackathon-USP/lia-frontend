@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { dataHora, MODO_INFO, ouTraco } from "@/lib/recepcao/formatar";
 import { detalharAtendimento, mensagemDeErro } from "@/services";
 import type { AtendimentoDetalhe } from "@/types";
+import { RelatorioTriagem } from "./RelatorioTriagem";
 import { Alertas, OrientacaoModo, SeloModo, SeloStatus, SeloTipo } from "./Selos";
 import { btn, btnSecundario } from "./estilos";
 
@@ -71,6 +72,14 @@ export function DetalheAtendimento({ id, onFechar }: { id: number; onFechar: () 
             <Alertas alertas={detalhe.alertas} />
             <OrientacaoModo modo={detalhe.modo} />
 
+            {detalhe.status === "finalizado" && (
+              <RelatorioTriagem
+                atendimentoId={detalhe.id}
+                inicial={detalhe.relatorio}
+                identificacao={`Senha ${ouTraco(detalhe.senha)} · ${ouTraco(detalhe.nome)} · ${dataHora(detalhe.finalizado_em)}`}
+              />
+            )}
+
             {detalhe.queixa && (
               <section aria-labelledby="queixa-titulo" className="rounded-2xl bg-white p-4">
                 <h3 id="queixa-titulo" className="mb-2 font-bold">Queixa principal</h3>
@@ -87,7 +96,9 @@ export function DetalheAtendimento({ id, onFechar }: { id: number; onFechar: () 
               </section>
             )}
 
-            {detalhe.resumo && <p className="whitespace-pre-line rounded-2xl bg-white p-4 leading-relaxed">{detalhe.resumo}</p>}
+            {detalhe.resumo && !detalhe.relatorio && (
+              <p className="whitespace-pre-line rounded-2xl bg-white p-4 leading-relaxed">{detalhe.resumo}</p>
+            )}
 
             {detalhe.respostas.length > 0 && (
               <section aria-labelledby="respostas-titulo">
@@ -95,7 +106,10 @@ export function DetalheAtendimento({ id, onFechar }: { id: number; onFechar: () 
                 <ol className="divide-y divide-tinta/10 rounded-2xl bg-white">
                   {detalhe.respostas.map((r) => (
                     <li key={r.pergunta_id} className="flex flex-wrap justify-between gap-2 px-4 py-2">
-                      <span className="text-tinta-suave">{r.pergunta}</span>
+                      <span className="text-tinta-suave">
+                        {r.pergunta}
+                        {r.da_lia && <span className="ml-2 rounded-full bg-petroleo px-2 py-0.5 text-xs font-semibold text-white">pergunta da LIA</span>}
+                      </span>
                       <span className="font-semibold">
                         {r.resposta}
                         {r.canal && <span className="ml-2 text-sm font-normal text-tinta-suave">({MODO_INFO[r.canal].rotulo.toLowerCase()})</span>}

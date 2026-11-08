@@ -69,7 +69,16 @@ export function TriagemPanel({ fase, pergunta, finalizacao, carregando, libras, 
         </>}
         {fase === "pergunta" && pergunta && <>
           <div className="min-h-24">
-            <p className="mb-2 text-base font-bold uppercase tracking-wider text-ambar">Seu atendimento</p>
+            {pergunta.origem === "lia" ? (
+              <p className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-base font-bold uppercase tracking-wider text-ambar">
+                A LIA quer saber
+                <span className="rounded-full bg-white/15 px-3 py-0.5 text-sm font-semibold normal-case tracking-normal text-white">
+                  Pergunta sobre o seu caso
+                </span>
+              </p>
+            ) : (
+              <p className="mb-2 text-base font-bold uppercase tracking-wider text-ambar">Seu atendimento</p>
+            )}
             <h2 className="text-2xl font-bold leading-snug sm:text-3xl">{pergunta.texto}</h2>
           </div>
           {pergunta.tipo === "opcoes" ? <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

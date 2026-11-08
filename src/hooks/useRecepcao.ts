@@ -103,6 +103,7 @@ export function useRecepcao() {
           cpf: item.cpf,
           alertas: item.alertas,
           resumo: detalhe?.resumo ?? null,
+          relatorio: detalhe?.relatorio ?? null,
         });
       }),
     [executar],

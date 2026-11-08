@@ -9,13 +9,19 @@ export interface Opcao {
   sinais: string[];
 }
 
+/** "triagem" = pergunta fixa; "lia" = pergunta complementar que a LIA (IA) criou para este paciente */
+export type OrigemPergunta = "triagem" | "lia";
+
 export interface Pergunta {
   id: string;
   texto: string;
+  /** Rótulo curto, usado nos resumos (ex.: "Onde dói", "Suor frio") */
+  titulo?: string;
   tipo: "opcoes" | "escala";
   opcoes: Opcao[];
   minimo: number | null;
   maximo: number | null;
+  origem?: OrigemPergunta;
 }
 
 export interface Atendimento {
