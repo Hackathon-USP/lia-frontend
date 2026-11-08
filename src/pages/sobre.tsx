@@ -1,3 +1,4 @@
+import dynamic from "next/dynamic";
 import Head from "next/head";
 import Link from "next/link";
 import type { ReactElement, ReactNode } from "react";
@@ -172,10 +173,10 @@ function IconBadge({ children }: { children: ReactNode }) {
   );
 }
 
-/** Ilustração provisória do totem. Será trocada pela imagem/vídeo real da avatar. */
-function TotemPlaceholder() {
+/** Ilustração do totem: aparece enquanto o avatar da LIA carrega. */
+function TotemIlustracao() {
   return (
-    <figure className="relative mx-auto w-full max-w-md">
+    <div className="mx-auto w-full max-w-md">
       <div className="flex aspect-[4/5] items-center justify-center rounded-[2rem] border-2 border-dashed border-petroleo/40 bg-menta p-8">
         <svg
           viewBox="0 0 200 260"
@@ -200,8 +201,23 @@ function TotemPlaceholder() {
           <circle cx="100" cy="163" r="5" />
         </svg>
       </div>
+    </div>
+  );
+}
+
+// A LIA ao vivo (avatar do VLibras): só no navegador, é um player WebGL num iframe.
+const LiaVitrine = dynamic(() => import("@/components/home/LiaVitrine").then((m) => m.LiaVitrine), {
+  ssr: false,
+  loading: () => <TotemIlustracao />,
+});
+
+/** No lugar do vídeo: a própria LIA, se apresentando em Libras e sinalizando o que a pessoa escrever. */
+function LiaAoVivo() {
+  return (
+    <figure className="relative mx-auto w-full max-w-lg">
+      <LiaVitrine />
       <figcaption className="mt-3 text-center text-tinta-suave">
-        Espaço reservado para o vídeo da avatar da LIA no totem da recepção.
+        Esta é a LIA de verdade, ao vivo. Escreva uma frase e veja em Libras.
       </figcaption>
     </figure>
   );
@@ -249,7 +265,7 @@ const SobrePage: NextPageWithLayout = () => {
               </a>
             </div>
           </div>
-          <TotemPlaceholder />
+          <LiaAoVivo />
         </Container>
       </section>
 
