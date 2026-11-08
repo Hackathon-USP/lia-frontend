@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { LiaLogo } from "@/components/brand/LiaLogo";
 import { useRecepcao } from "@/hooks/useRecepcao";
 import { DetalheAtendimento } from "./DetalheAtendimento";
 import { FilaLista } from "./FilaLista";
@@ -22,8 +23,9 @@ export function RecepcaoScreen() {
     <div className="min-h-dvh bg-creme text-tinta">
       <header className="bg-tinta px-4 py-3 text-white sm:px-8">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-bold">
-            LIA <span className="font-normal text-white/80">· Recepção</span>
+          <h1 className="flex items-center gap-3 text-xl font-bold">
+            <LiaLogo tom="claro" />
+            <span className="font-normal text-white/80">Recepção</span>
           </h1>
           <nav aria-label="Seções" className="flex gap-2">
             <button type="button" aria-current={aba === "fila" ? "page" : undefined} onClick={() => setAba("fila")} className={abaBtn("fila")}>

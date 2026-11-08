@@ -1,6 +1,7 @@
+import Image from "next/image";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { LiaCaption } from "@/components/call/LiaCaption";
-import { IconVoiceOff, IconVoiceOn } from "@/components/call/icons";
+import { IconSend, IconVoiceOff, IconVoiceOn } from "@/components/call/icons";
 import { env } from "@/config/env";
 import { useLiaPresenter } from "@/hooks/useLiaPresenter";
 import { VLIBRAS_PLAYER_SRC } from "@/hooks/useVLibrasPlayer";
@@ -13,7 +14,7 @@ const APRESENTACAO = [
 ];
 
 /** Frases prontas para quem quer experimentar sem digitar. */
-const SUGESTOES = ["Bom dia, tudo bem?", "Onde fica a recepção?", "Você está com dor?", "Sua senha é P 12."];
+const SUGESTOES = ["Bom dia, tudo bem?", "Onde fica a recepção?", "Você está com dor?"];
 
 /** Pausa entre as frases da apresentação. */
 const PAUSA_MS = 1200;
@@ -23,8 +24,8 @@ const SEM_LIBRAS_MS = 3500;
 const MAX_FRASE = 200;
 
 /**
- * Vitrine da LIA na página inicial: o avatar ao vivo, a legenda acompanhando os sinais
- * e uma caixa para qualquer pessoa digitar uma frase e ver a LIA sinalizar.
+ * Vitrine da LIA (página inicial e /sobre): o avatar ao vivo se apresentando em Libras,
+ * a legenda acompanhando os sinais e uma caixa para qualquer pessoa ver uma frase em Libras.
  */
 export function LiaVitrine() {
   const lia = useLiaPresenter(env.liaAvatar);
@@ -80,11 +81,12 @@ export function LiaVitrine() {
   }
 
   const progresso = Math.round(loadProgress * 100);
+  const { voice } = lia;
 
   return (
-    <div className="overflow-hidden rounded-[2rem] bg-white shadow-xl ring-1 ring-tinta/10">
+    <div className="overflow-hidden rounded-4xl bg-white shadow-xl ring-1 ring-tinta/10">
       {/* Palco: fundo suave no lugar do branco do player (mesmo truque do totem) */}
-      <div className="relative aspect-[4/3] bg-[#E6E1D8] sm:aspect-[5/4]">
+      <div className="relative aspect-[5/4] bg-[#E6E1D8]">
         <iframe
           ref={iframeRef}
           src={VLIBRAS_PLAYER_SRC}
@@ -92,14 +94,16 @@ export function LiaVitrine() {
           sandbox="allow-scripts allow-same-origin allow-pointer-lock"
           allow="local-network-access"
           tabIndex={-1}
-          className={`absolute inset-0 h-full w-full border-0 mix-blend-multiply transition-opacity duration-500 motion-reduce:transition-none ${
+          className={`absolute inset-x-0 bottom-0 h-[calc(100%-3rem)] w-full border-0 mix-blend-multiply transition-opacity duration-500 motion-reduce:transition-none ${
             ready ? "opacity-100" : "opacity-0"
           }`}
         />
+
         {!ready && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-6 text-center text-tinta">
+            <Image src="/assets/icon.jpeg" alt="" width={88} height={88} className="size-22 rounded-3xl shadow-lg motion-safe:animate-pulse" />
             {failed ? (
-              <p role="alert" className="text-lg">O avatar não carregou agora. Tente recarregar a página.</p>
+              <p role="alert" className="max-w-xs text-lg">O avatar não carregou agora. Tente recarregar a página.</p>
             ) : (
               <>
                 <p className="text-lg font-bold">A LIA está chegando…</p>
@@ -109,22 +113,35 @@ export function LiaVitrine() {
                   aria-valuemin={0}
                   aria-valuemax={100}
                   aria-valuenow={progresso}
-                  className="h-2 w-48 overflow-hidden rounded-full bg-tinta/15"
+                  className="h-1.5 w-40 overflow-hidden rounded-full bg-tinta/10"
                 >
-                  <div className="h-full bg-petroleo" style={{ width: `${progresso}%` }} />
+                  <div className="h-full rounded-full bg-petroleo transition-[width] duration-300" style={{ width: `${progresso}%` }} />
                 </div>
               </>
             )}
           </div>
         )}
+
         <span className="absolute top-4 left-4 flex items-center gap-2 rounded-full bg-tinta/85 px-3 py-1.5 text-sm font-semibold text-white">
           <span aria-hidden="true" className={`size-2 rounded-full ${ready ? "bg-emerald-400" : "bg-ambar"}`} />
           {playing ? "sinalizando" : ready ? "ao vivo" : "carregando"}
         </span>
+
+        {voice.supported && (
+          <button
+            type="button"
+            onClick={voice.toggle}
+            aria-pressed={voice.enabled}
+            className="absolute top-3 right-3 inline-flex size-11 items-center justify-center rounded-full bg-white/90 text-tinta shadow-sm hover:bg-white focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ambar"
+          >
+            {voice.enabled ? <IconVoiceOn /> : <IconVoiceOff />}
+            <span className="sr-only">{voice.enabled ? "Desligar a voz da LIA" : "Ligar a voz da LIA"}</span>
+          </button>
+        )}
       </div>
 
-      {/* Legenda acompanhando os sinais */}
-      <div className="flex min-h-24 items-center justify-center bg-tinta px-4 py-4" aria-live="polite">
+      {/* Legenda: acompanha os sinais, palavra por palavra */}
+      <div className="flex min-h-20 items-center justify-center bg-creme px-4 py-3" aria-live="polite">
         {lia.caption.text ? (
           <LiaCaption
             label="LIA"
@@ -133,14 +150,15 @@ export function LiaVitrine() {
             glossIndex={glossIndex}
             playing={playing}
             voiceWord={lia.voiceWord}
+            tamanho="media"
           />
         ) : (
-          <p className="text-white/70">A legenda aparece aqui.</p>
+          <p className="text-tinta-suave">A legenda acompanha os sinais, palavra por palavra.</p>
         )}
       </div>
 
       {/* Experimente */}
-      <div className="space-y-3 p-5 text-tinta sm:p-6">
+      <div className="space-y-3 border-t border-tinta/10 p-5 text-tinta">
         <form onSubmit={handleSubmit} className="flex gap-2">
           <label htmlFor="vitrine-frase" className="sr-only">Frase para a LIA sinalizar</label>
           <input
@@ -148,49 +166,39 @@ export function LiaVitrine() {
             value={frase}
             onChange={(e) => setFrase(e.target.value)}
             maxLength={MAX_FRASE}
-            placeholder="Escreva uma frase e veja em Libras"
+            placeholder="Escreva algo e veja em Libras"
             autoComplete="off"
-            className="min-h-12 min-w-0 flex-1 rounded-full border border-tinta/20 bg-creme px-5 text-base focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ambar"
+            className="min-h-12 min-w-0 flex-1 rounded-full border border-tinta/15 bg-creme px-5 text-base focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ambar"
           />
           <button
             type="submit"
             disabled={!frase.trim()}
-            className="min-h-12 rounded-full bg-petroleo px-5 font-bold text-white hover:bg-petroleo-escuro focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ambar disabled:opacity-50"
+            className="inline-flex size-12 shrink-0 items-center justify-center rounded-full bg-petroleo text-white hover:bg-petroleo-escuro focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ambar disabled:opacity-40"
           >
-            Sinalizar
+            <IconSend />
+            <span className="sr-only">Sinalizar</span>
           </button>
         </form>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="font-semibold text-tinta-suave">Experimente:</span>
           {SUGESTOES.map((s) => (
             <button
               key={s}
               type="button"
               onClick={() => experimentar(s)}
-              className="rounded-full bg-menta px-3 py-1.5 text-sm font-semibold text-petroleo-escuro hover:bg-petroleo hover:text-white focus-visible:outline-3 focus-visible:outline-ambar"
+              className="rounded-full bg-menta px-3 py-1.5 font-semibold text-petroleo-escuro hover:bg-petroleo hover:text-white focus-visible:outline-3 focus-visible:outline-ambar"
             >
               {s}
             </button>
           ))}
-        </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-sm">
-          {lia.voice.supported ? (
+          {etapa === null && (
             <button
               type="button"
-              onClick={lia.voice.toggle}
-              aria-pressed={lia.voice.enabled}
-              className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 font-semibold hover:bg-menta focus-visible:outline-3 focus-visible:outline-ambar"
+              onClick={reverApresentacao}
+              className="rounded-full px-2 py-1.5 font-semibold text-petroleo underline underline-offset-4 hover:text-petroleo-escuro focus-visible:outline-3 focus-visible:outline-ambar"
             >
-              {lia.voice.enabled ? <IconVoiceOn /> : <IconVoiceOff />}
-              {lia.voice.enabled ? "Voz ligada" : "Voz desligada"}
-            </button>
-          ) : (
-            <span />
-          )}
-          {etapa === null && (
-            <button type="button" onClick={reverApresentacao} className="rounded-full px-3 py-1.5 font-semibold text-petroleo underline-offset-4 hover:underline focus-visible:outline-3 focus-visible:outline-ambar">
-              Ver a apresentação de novo
+              Rever a apresentação
             </button>
           )}
         </div>

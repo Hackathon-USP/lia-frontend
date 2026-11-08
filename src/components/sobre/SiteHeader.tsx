@@ -1,6 +1,5 @@
-import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ROUTES } from "@/routes";
+import { LiaLogo } from "@/components/brand/LiaLogo";
 import { IconMenu, IconX } from "./icons";
 import { TextSizeControl } from "./TextSizeControl";
 
@@ -66,9 +65,7 @@ export function SiteHeader() {
   return (
     <header className="sticky top-0 z-40 border-b border-tinta/10 bg-creme/95 pt-[env(safe-area-inset-top)] backdrop-blur">
       <div className="mx-auto flex h-18 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
-        <Link href={ROUTES.home} className="rounded-lg text-2xl font-bold tracking-tight text-petroleo">
-          LIA<span className="sr-only">, página inicial</span>
-        </Link>
+        <LiaLogo />
 
         <nav aria-label="Seções da página" className="hidden lg:block">
           <ul className="flex items-center gap-1">

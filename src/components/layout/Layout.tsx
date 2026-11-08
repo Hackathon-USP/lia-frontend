@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { LiaLogo } from "@/components/brand/LiaLogo";
 import { ROUTES } from "@/routes";
 
 /**
@@ -12,9 +13,7 @@ export function Layout({ children }: { children: ReactNode }) {
     <div className="flex h-dvh flex-col">
       <header className="shrink-0 border-b border-black/10 px-4 pt-[env(safe-area-inset-top)] sm:px-6 dark:border-white/10">
         <nav className="mx-auto flex h-14 max-w-3xl items-center justify-between md:h-16">
-          <Link href={ROUTES.home} className="text-lg font-semibold md:text-xl">
-            LIA
-          </Link>
+          <LiaLogo />
           <div className="flex gap-1 text-sm sm:gap-2 md:text-base">
             <Link href={ROUTES.chat} className="rounded-lg px-3 py-2 hover:bg-black/5 dark:hover:bg-white/10">
               Conversar
