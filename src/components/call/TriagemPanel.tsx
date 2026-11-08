@@ -3,9 +3,8 @@ import { RESTART_AFTER_END_MS } from "@/config/totem";
 import type { FaseTriagem } from "@/hooks/useTriagem";
 import type { Finalizacao, Pergunta } from "@/types";
 import { ResetCountdown } from "./ResetCountdown";
+import { optionButton, primaryButton } from "./styles";
 
-const optionButton = "min-h-16 rounded-2xl border-2 border-transparent bg-white px-5 py-4 text-xl font-bold text-tinta shadow-sm hover:bg-menta focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-ambar disabled:opacity-50";
-const primaryButton = `${optionButton} !bg-ambar !text-tinta`;
 const RESTART_SECONDS = RESTART_AFTER_END_MS / 1000;
 
 interface Props {
