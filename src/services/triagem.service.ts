@@ -1,5 +1,5 @@
 import { API_ROUTES } from "@/routes";
-import type { Atendimento, Finalizacao, Identificacao, ModoAcessibilidade, Pergunta, Resposta, TextosTotem } from "@/types";
+import type { Atendimento, Conferencia, Finalizacao, Identificacao, ModoAcessibilidade, Pergunta, Resposta, TextosTotem } from "@/types";
 import { ApiError } from "@/types";
 import { api } from "./api";
 
@@ -32,6 +32,16 @@ export function responder(id: number, resposta: Resposta) {
 /** Nome e CPF do paciente. Obrigatório antes de finalizar (422 = nome/CPF inválido). */
 export function identificarPaciente(id: number, dados: Identificacao) {
   return api<Atendimento>(API_ROUTES.atendimentos.identificar(id), { method: "PUT", body: dados });
+}
+
+/** Resumo das respostas para o paciente conferir (404 em backs antigos, sem a conferência). */
+export function buscarConferencia(id: number) {
+  return api<Conferencia>(API_ROUTES.atendimentos.conferencia(id));
+}
+
+/** Volta a triagem para `perguntaId`; o atendimento devolvido traz essa pergunta de novo. */
+export function corrigirResposta(id: number, perguntaId: string) {
+  return api<Atendimento>(API_ROUTES.atendimentos.corrigir(id, perguntaId), { method: "DELETE" });
 }
 
 export function finalizarAtendimento(id: number) {
