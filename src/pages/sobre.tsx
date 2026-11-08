@@ -153,14 +153,13 @@ const LINHA_DO_TEMPO = [
  * Founders. PROVISÓRIO: troque nome, papel, frase e foto.
  * Fotos: coloque o arquivo em public/assets/equipe/ (quadrado, ex.: 600x600) e aponte `foto` para ele.
  */
-const FOTO_EQUIPE = "/assets/equipe/foto-equipe.svg"; // troque por uma foto 16:9 da equipe
 /**
  * Recorte quadrado da foto: `enquadramento` é onde fica o rosto (object-position)
  * e `zoom` aproxima a partir dali (1 = sem zoom; fotos de corpo inteiro precisam de mais).
  */
 const FOUNDERS = [
   {
-    nome: "Vini",
+    nome: "Vinicius Trindade",
     papel: "Cofundador",
     frase: "A possibilidade de as pessoas receberem acesso à saúde de forma simples.",
     foto: "/assets/equipe/vini.jpeg",
@@ -176,12 +175,20 @@ const FOUNDERS = [
     zoom: 1.8,
   },
   {
-    nome: "Matheus",
+    nome: "Matheus Santos",
     papel: "Cofundador",
-    frase: "Queremos escalar a LIA para diversos mercados.",
+    frase: "Revolucionar o mundo através da LIA.",
     foto: "/assets/equipe/matheus.jpg",
     enquadramento: "46% 20%",
     zoom: 3,
+  },
+  {
+    nome: "Luciano Santanna",
+    papel: "Cofundador",
+    frase: "Aumentar a acessibilidade para o mundo.",
+    foto: "/assets/equipe/luciano.jpg",
+    enquadramento: "50% 35%",
+    zoom: 1,
   },
 ];
 
@@ -583,12 +590,7 @@ const SobrePage: NextPageWithLayout = () => {
             intro="Um time que juntou tecnologia, saúde e acessibilidade para que ninguém precise de intérprete para ser atendido."
           />
 
-          <figure className="mt-12 overflow-hidden rounded-4xl bg-menta">
-            {/* eslint-disable-next-line @next/next/no-img-element -- foto local; trocar o arquivo não exige mudar o código */}
-            <img src={FOTO_EQUIPE} alt="Os founders da LIA" width={1600} height={900} className="aspect-video w-full object-cover" />
-          </figure>
-
-          <ul className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          <ul className="mt-12 grid gap-6 sm:grid-cols-2">
             {FOUNDERS.map((f, i) => (
               <li key={i} className="flex gap-5 rounded-3xl border border-tinta/10 bg-creme p-6">
                 <span className="size-24 shrink-0 overflow-hidden rounded-2xl bg-menta">
