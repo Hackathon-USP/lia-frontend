@@ -34,7 +34,7 @@ export function LiaCaption({ label, text, gloss, glossIndex, playing, voiceWord,
 
   return (
     <p
-      className={`max-w-3xl rounded-2xl bg-tinta/90 px-5 py-3 text-center leading-relaxed text-white shadow-lg ${
+      className={`max-w-[min(100%,48rem)] rounded-2xl bg-tinta/90 px-5 py-3 text-center leading-relaxed wrap-anywhere text-white shadow-lg ${
         tamanho === "grande" ? "text-lg sm:text-2xl" : "text-base sm:text-lg"
       }`}
     >

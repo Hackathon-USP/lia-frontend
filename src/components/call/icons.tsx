@@ -69,6 +69,12 @@ export const IconSend = () => (
     <path d="M22 2 15 22l-4-9-9-4 20-7z" />
   </Svg>
 );
+export const IconKeyboard = () => (
+  <Svg>
+    <rect x="2" y="5" width="20" height="14" rx="3" />
+    <path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 15h10" />
+  </Svg>
+);
 export const IconEnd = () => (
   <Svg>
     <path d="M18 6 6 18M6 6l12 12" />

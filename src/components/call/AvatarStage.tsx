@@ -15,7 +15,7 @@ interface Props {
   hideCaption: boolean;
   /** Já há outro erro na tela: não mostra também o de tradução */
   hideTranslateError: boolean;
-  /** Sobreposições do palco (câmera do paciente) */
+  /** Prévia da câmera ao lado do status. */
   children?: ReactNode;
 }
 
@@ -27,8 +27,17 @@ export function AvatarStage({ lia, status, pipSide, hidden, hideCaption, hideTra
 
   return (
     // Fundo suave em vez do branco puro do player
-    <main className={`${hidden ? "hidden" : "flex"} min-h-[380px] flex-col bg-[#E6E1D8] text-tinta`}>
-      <div className="relative min-h-[320px] flex-1">
+    <main className={`${hidden ? "hidden" : "flex"} min-w-0 flex-col bg-[#E6E1D8] text-tinta`}>
+      <div className={`flex items-start gap-2 p-3 sm:gap-4 sm:p-4 ${pipSide === "left" ? "justify-end" : "justify-between"}`}>
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 rounded-2xl bg-tinta/85 px-3 py-2 text-white">
+          <span aria-hidden="true" className={`size-2.5 shrink-0 rounded-full ${ready ? "bg-emerald-400" : "bg-ambar"}`} />
+          <span className="font-bold">LIA</span>
+          <span className="text-sm text-white/85">{status}</span>
+        </div>
+        {children}
+      </div>
+
+      <div className="relative grid min-h-[clamp(13rem,33dvh,24rem)] flex-1 place-items-center">
         <iframe
           ref={iframeRef}
           src={VLIBRAS_PLAYER_SRC}
@@ -38,13 +47,13 @@ export function AvatarStage({ lia, status, pipSide, hidden, hideCaption, hideTra
           tabIndex={-1}
           // O player desenha fundo branco; "multiply" troca o branco pela cor do palco
           // e quase não altera as cores do avatar.
-          className={`absolute inset-x-0 bottom-0 h-[calc(100%-112px)] w-full border-0 mix-blend-multiply transition-opacity duration-500 motion-reduce:transition-none ${
+          className={`absolute inset-0 size-full border-0 mix-blend-multiply transition-opacity duration-500 motion-reduce:transition-none ${
             ready ? "opacity-100" : "opacity-0"
           }`}
         />
 
         {!ready && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-6 text-center">
+          <div className="flex w-full min-w-0 flex-col items-center justify-center gap-4 p-4 text-center">
             {failed ? (
               <p role="alert" className="text-lg">
                 O avatar está indisponível. Você pode continuar pelas opções na tela.
@@ -58,7 +67,7 @@ export function AvatarStage({ lia, status, pipSide, hidden, hideCaption, hideTra
                   aria-valuemin={0}
                   aria-valuemax={100}
                   aria-valuenow={progress}
-                  className="h-2 w-56 overflow-hidden rounded-full bg-tinta/15"
+                  className="h-2 w-full max-w-56 overflow-hidden rounded-full bg-tinta/15"
                 >
                   <div className="h-full bg-petroleo" style={{ width: `${progress}%` }} />
                 </div>
@@ -66,23 +75,10 @@ export function AvatarStage({ lia, status, pipSide, hidden, hideCaption, hideTra
             )}
           </div>
         )}
-
-        {/* Identificação da chamada, no canto oposto ao da câmera */}
-        <div
-          className={`absolute top-4 z-10 flex items-center gap-2 rounded-full bg-tinta/85 px-4 py-2 text-white sm:top-6 ${
-            pipSide === "right" ? "left-4 sm:left-6" : "right-4 sm:right-6"
-          }`}
-        >
-          <span aria-hidden="true" className={`size-2.5 rounded-full ${ready ? "bg-emerald-400" : "bg-ambar"}`} />
-          <span className="font-bold">LIA</span>
-          <span className="text-sm text-white/85">{status}</span>
-        </div>
-
-        {children}
       </div>
 
       {/* Legendas ficam fora do espaço do avatar. */}
-      <div className="flex flex-col items-center gap-2 bg-creme p-4" aria-live="polite">
+      <div className="flex min-w-0 flex-col items-center gap-2 bg-creme px-3 py-2 sm:p-4" aria-live="polite">
         {caption.text && !hideCaption && (
           <LiaCaption
             label={caption.isTranslation ? "Em Libras" : "LIA"}

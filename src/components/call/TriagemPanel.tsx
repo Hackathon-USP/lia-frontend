@@ -40,12 +40,12 @@ function IntensityScale({ pergunta, carregando, onResponder }: Pick<Props, "onRe
   const maximum = pergunta.maximo ?? 10;
   return (
     <div className="space-y-5">
-      <div role="group" aria-label="Escolha a intensidade" className="grid grid-cols-4 gap-3 sm:grid-cols-6">
+      <div role="group" aria-label="Escolha a intensidade" className="grid grid-cols-4 gap-2 @sm:grid-cols-6">
         {Array.from({ length: maximum - minimum + 1 }, (_, i) => minimum + i).map((number) => (
           <button key={number} type="button" aria-pressed={selected === number} disabled={carregando}
             onClick={() => setSelected(number)}
-            className={`${optionButton} text-2xl ${selected === number ? "!border-ambar !bg-ambar ring-2 ring-white" : ""}`}>
-            {number}{selected === number && <span aria-hidden="true" className="ml-2">✓</span>}
+            className={`${optionButton} !min-h-12 !px-1 !py-2 tabular-nums ${selected === number ? "!border-ambar !bg-ambar ring-2 ring-white" : ""}`}>
+            {number}
           </button>
         ))}
       </div>
@@ -60,14 +60,14 @@ function IntensityScale({ pergunta, carregando, onResponder }: Pick<Props, "onRe
 
 export function TriagemPanel({ fase, pergunta, finalizacao, carregando, libras, consentimento, identificacao, conferencia, onConsentir, onResponder, onRecomecar }: Props) {
   return (
-    <section aria-label="Atendimento" aria-busy={carregando} className="w-full px-4 py-6 sm:px-8">
-      <div className="mx-auto max-w-3xl space-y-6">
+    <section aria-label="Atendimento" aria-busy={carregando} className="w-full px-3 py-4 sm:px-6">
+      <div className="@container mx-auto max-w-3xl space-y-4">
         {fase === "conectando" && <h2 className="text-center text-2xl font-bold">Preparando seu atendimento…</h2>}
         {fase === "consentimento" && <>
-          <div className="rounded-3xl bg-white/10 p-6 sm:p-8">
+          <div className="rounded-3xl bg-white/10 p-4 @sm:p-6">
             <p className="mb-3 text-base font-bold uppercase tracking-wider text-ambar">Antes de começar</p>
             <h2 className="mb-5 text-3xl font-bold">Podemos continuar?</h2>
-            <p className="text-xl leading-relaxed">{consentimento}</p>
+            <p className="text-lg leading-relaxed @sm:text-xl">{consentimento}</p>
           </div>
           <div className="grid gap-4">
             <button type="button" disabled={carregando} onClick={() => onConsentir(true)} className={primaryButton}>Concordo e continuar{libras && <span className="mt-1 block text-base font-normal">Sinal SIM</span>}</button>
@@ -88,7 +88,7 @@ export function TriagemPanel({ fase, pergunta, finalizacao, carregando, libras, 
             )}
             <h2 className="text-2xl font-bold leading-snug sm:text-3xl">{pergunta.texto}</h2>
           </div>
-          {pergunta.tipo === "opcoes" ? <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {pergunta.tipo === "opcoes" ? <div className="grid grid-cols-1 gap-3 @sm:grid-cols-2">
             {pergunta.opcoes.map((option) => <button key={option.id} type="button" disabled={carregando} onClick={() => onResponder(option.id, option.rotulo)} className={optionButton}>
               {option.rotulo}{libras && option.sinais[0] && <span className="mt-1 block text-base font-normal text-tinta-suave">Sinal {option.sinais[0]}</span>}
             </button>)}

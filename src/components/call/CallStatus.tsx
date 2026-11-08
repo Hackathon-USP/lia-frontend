@@ -22,7 +22,7 @@ interface Props {
 /** Avisos da conversa: LIA pensando, erros do back e do microfone, voz bloqueada. */
 export function CallStatus({ carregando, lento, erro, onTentarDeNovo, listenError, voiceBlocked }: Props) {
   return (
-    <div className="mx-auto flex min-h-20 w-full max-w-3xl flex-col justify-center gap-3 px-6 py-3" aria-live="polite">
+    <div className="mx-auto flex w-full max-w-3xl flex-col gap-3 px-3 pb-3 empty:pb-0 sm:px-6" aria-live="polite">
       {/* "LIA está pensando" fica no indicador de vez; aqui só o aviso de demora. */}
       {carregando && lento && (
         <p className="rounded-2xl bg-tinta/85 px-4 py-2 text-white">Só um instante… pode levar até 1 minuto.</p>
@@ -52,5 +52,5 @@ export function CallStatus({ carregando, lento, erro, onTentarDeNovo, listenErro
 /** A última coisa que o paciente disse (o que está dizendo agora aparece no indicador de vez). */
 export function UserEcho({ userCaption }: { userCaption: string }) {
   if (!userCaption) return null;
-  return <p className="mx-auto w-full max-w-3xl px-8 text-lg text-white/80">Você disse · {userCaption}</p>;
+  return <p className="text-lg text-white/80">Você disse · {userCaption}</p>;
 }

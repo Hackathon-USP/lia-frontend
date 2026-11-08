@@ -18,39 +18,36 @@ export function CameraPip({
   videoRef,
   overlayRef,
   status,
-  side,
   handsVisible,
 }: {
   videoRef: RefObject<HTMLVideoElement | null>;
   overlayRef: RefObject<HTMLCanvasElement | null>;
   status: CameraStatus;
-  side: PipSide;
   handsVisible: boolean;
 }) {
   const active = status === "active";
   const problem = !active && status !== "idle" && status !== "requesting";
   // Mesmo enquadramento no vídeo e no desenho das mãos (canvas também aceita object-fit).
-  const media = "aspect-video w-full -scale-x-100 object-cover sm:aspect-video";
+  const media = "aspect-video w-full -scale-x-100 object-cover";
 
   return (
     <figure
-      className={`absolute top-4 z-20 w-36 overflow-hidden rounded-2xl bg-black shadow-2xl ring-2 sm:top-6 sm:w-40 md:w-44 ${
+      className={`relative w-28 overflow-hidden rounded-xl bg-black shadow-sm ring-2 sm:w-36 md:w-44 ${
         handsVisible ? "ring-ambar" : "ring-white/25"
-      } ${side === "right" ? "right-4 sm:right-6" : "left-4 sm:left-6"}`}
+      }`}
     >
       {/* O <video> fica sempre montado para o ref existir quando o stream chegar. */}
-      <video ref={videoRef} autoPlay muted playsInline aria-label="Sua câmera" className={`${media} ${active ? "" : "invisible"}`} />
-      <canvas ref={overlayRef} aria-hidden="true" className={`pointer-events-none absolute inset-0 h-full ${media}`} />
-      {!active && (
-        <div className="absolute inset-0 flex items-center justify-center p-3 text-center text-xs sm:text-sm">
-          <p role={problem ? "alert" : undefined} className={problem ? "text-red-300" : "text-white/85"}>
-            {HINT[status]}
-          </p>
-        </div>
+      <video ref={videoRef} autoPlay muted playsInline aria-label="Sua câmera" className={`${media} ${active ? "" : "invisible absolute"}`} />
+      <canvas ref={overlayRef} aria-hidden="true" className={`pointer-events-none absolute inset-0 h-full ${media} ${active ? "" : "invisible"}`} />
+      {active ? (
+        <figcaption className="absolute inset-x-0 bottom-0 bg-black/65 px-2 py-1 text-xs font-semibold text-white">
+          Você{handsVisible ? " · mãos visíveis" : ""}
+        </figcaption>
+      ) : (
+        <figcaption className="grid min-h-16 place-items-center px-2 py-1.5 text-center text-xs sm:min-h-20">
+          <span role={problem ? "alert" : undefined} className={problem ? "text-red-300" : "text-white/85"}>{HINT[status]}</span>
+        </figcaption>
       )}
-      <figcaption className="absolute bottom-2 left-2 rounded-full bg-black/60 px-2.5 py-0.5 text-xs font-semibold text-white sm:text-sm">
-        Você{handsVisible ? " · mãos visíveis" : ""}
-      </figcaption>
     </figure>
   );
 }

@@ -118,7 +118,7 @@ function SignRow({ sign, server, disabled, onToggle, onRetry }: {
             value={other}
             onChange={(e) => setOther(e.target.value)}
             placeholder="Tentar outra glosa do VLibras (ex.: DOER)"
-            className={`${campo} min-h-10 flex-1 text-sm`}
+            className={`${campo} min-h-10 min-w-0 flex-1 text-sm`}
             disabled={disabled}
           />
           <button type="submit" className={`${btn} ${btnSecundario} min-h-10 text-sm`} disabled={disabled || !other.trim()}>
@@ -206,7 +206,7 @@ export function TreinoScreen() {
         </div>
       </header>
 
-      <main className="mx-auto grid max-w-7xl gap-6 px-4 py-6 sm:px-8 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
+      <main className="mx-auto grid max-w-7xl grid-cols-[minmax(0,1fr)] gap-6 px-4 py-6 wrap-anywhere sm:px-8 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
         <div className="space-y-6">
           <Panel title="Avatar do VLibras">
             <AvatarStage iframeRef={iframeRef} overlay={overlay} />
@@ -246,7 +246,7 @@ export function TreinoScreen() {
 
         <div className="space-y-6">
           <Panel title="Gerar exemplos">
-            <fieldset className="mb-3" disabled={running}>
+            <fieldset className="mb-3 min-w-0" disabled={running}>
               <legend className="mb-1 font-semibold">Avatares</legend>
               <div className="flex flex-wrap gap-4">
                 {VLIBRAS_AVATARS.map((a) => (
@@ -260,7 +260,7 @@ export function TreinoScreen() {
                 A leitura das mãos perde muito a mão do Guga: a maioria dos exemplos dele é recusada.
               </p>
             </fieldset>
-            <fieldset className="mb-3" disabled={running}>
+            <fieldset className="mb-3 min-w-0" disabled={running}>
               <legend className="mb-1 font-semibold">Velocidades</legend>
               <div className="flex flex-wrap gap-4">
                 {SPEEDS.map((s) => (

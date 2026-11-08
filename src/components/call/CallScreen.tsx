@@ -75,118 +75,125 @@ export function CallScreen({ modo = "libras", active = true, onEnd }: Props) {
   const completed = triagem.fase === "finalizado" || triagem.fase === "recusado";
   const libras = modo === "libras";
   const { signs, ouvido } = input;
-  const layout = completed && !libras ? "" : libras && !completed ? "lg:grid-cols-[55%_45%]" : "lg:grid-cols-[35%_65%]";
+  const layout = completed && !libras
+    ? ""
+    : libras && !completed
+      ? "md:landscape:grid-cols-[minmax(0,11fr)_minmax(0,9fr)]"
+      : "md:landscape:grid-cols-[minmax(0,7fr)_minmax(0,13fr)]";
 
   return (
-    <div inert={!active} aria-hidden={!active} className={`lia-call fixed inset-0 flex flex-col overflow-y-auto bg-tinta font-sans text-white ${active ? "" : "invisible pointer-events-none"}`}>
+    <div inert={!active} aria-hidden={!active} className={`lia-call fixed inset-0 grid grid-cols-[minmax(0,1fr)_auto] grid-rows-[auto_minmax(0,1fr)] bg-tinta pt-[env(safe-area-inset-top)] pl-[env(safe-area-inset-left)] font-sans text-white ${active ? "" : "invisible pointer-events-none"}`}>
       <h1 className="sr-only">Chamada com a LIA</h1>
 
-      <div className={`totem-content grid flex-1 ${layout}`}>
-        <AvatarStage
-          lia={lia}
-          status={liaStatusLabel({ ...lia.player, listening: ouvido.listening, interprete: input.interprete && triagem.fase !== "identificacao" })}
-          pipSide={pipSide}
-          hidden={completed && !libras}
-          hideCaption={triagem.carregando}
-          hideTranslateError={!!triagem.erro}
-        >
-          <div className={libras ? "" : "hidden"}>
-            <CameraPip videoRef={videoRef} overlayRef={overlayRef} status={cameraStatus} side={pipSide} handsVisible={signs.handsVisible} />
-          </div>
-        </AvatarStage>
-
-        <div className="flex flex-col justify-center bg-petroleo-escuro/40">
-          <CallStatus
-            carregando={triagem.carregando}
-            lento={triagem.lento}
-            erro={triagem.erro}
-            onTentarDeNovo={triagem.tentarDeNovo}
-            listenError={ouvido.error}
-            voiceBlocked={lia.voice.enabled && lia.voice.blocked}
-          />
-          {!completed && (
-            <div className="mx-auto w-full max-w-3xl space-y-2 px-4 sm:px-8">
-              <TurnoIndicador
-                turno={turnoAtual({
-                  liaFalando: lia.talking,
-                  pensando: triagem.carregando || triagem.pensando,
-                  interim: ouvido.interim,
-                  ouvindo: ouvido.listening,
-                  esperandoResposta: ["consentimento", "pergunta", "identificacao", "conferencia"].includes(triagem.fase),
-                })}
-                interim={ouvido.interim}
-                libras={libras}
-                podeInterromper={ouvido.listening}
-              />
-              <UserEcho userCaption={input.userCaption} />
+      <div className="col-start-1 row-start-2 flex min-w-0 flex-col overflow-y-auto overscroll-contain wrap-anywhere">
+        <div className={`grid flex-1 grid-cols-[minmax(0,1fr)] ${layout}`}>
+          <AvatarStage
+            lia={lia}
+            status={liaStatusLabel({ ...lia.player, listening: ouvido.listening, interprete: input.interprete && triagem.fase !== "identificacao" })}
+            pipSide={pipSide}
+            hidden={completed && !libras}
+            hideCaption={triagem.carregando}
+            hideTranslateError={!!triagem.erro}
+          >
+            <div className={!libras ? "hidden" : pipSide === "left" ? "order-first shrink-0" : "shrink-0"}>
+              <CameraPip videoRef={videoRef} overlayRef={overlayRef} status={cameraStatus} handsVisible={signs.handsVisible} />
             </div>
-          )}
-          <TriagemPanel
-            key={triagem.fase}
-            libras={libras}
-            consentimento={triagem.consentimento}
-            identificacao={{
-              instrucao: triagem.textoIdentificacao,
-              rascunho: triagem.rascunho,
-              onMudar: triagem.mudarRascunho,
-              erro: triagem.erroIdentificacao,
-              onEnviar: (nome, cpf) => void triagem.identificar(nome, cpf),
-            }}
-            conferencia={{
-              resumo: triagem.conferencia,
-              onConfirmar: () => {
-                input.mostrarResposta("Está tudo certo");
-                void triagem.confirmarConferencia();
-              },
-              onCorrigir: (perguntaId) => {
-                input.mostrarResposta("Quero corrigir");
-                void triagem.corrigir(perguntaId);
-              },
-              onCorrigirIdentificacao: triagem.corrigirIdentificacao,
-            }}
-            fase={triagem.fase}
-            pergunta={triagem.pergunta}
-            finalizacao={triagem.finalizacao}
-            carregando={triagem.carregando}
-            onConsentir={(aceita) => {
-              input.mostrarResposta(aceita ? "Sim, concordo" : "Não");
-              void triagem.consentir(aceita);
-            }}
-            onResponder={(valor, rotulo) => {
-              input.mostrarResposta(rotulo);
-              void triagem.responderPergunta(valor, "toque");
-            }}
-            onRecomecar={() => {
-              input.mostrarResposta("");
-              triagem.recomecar();
-            }}
-          />
+          </AvatarStage>
+
+          <div className="flex min-w-0 flex-col justify-center bg-petroleo-escuro/40 pt-3">
+            <CallStatus
+              carregando={triagem.carregando}
+              lento={triagem.lento}
+              erro={triagem.erro}
+              onTentarDeNovo={triagem.tentarDeNovo}
+              listenError={ouvido.error}
+              voiceBlocked={lia.voice.enabled && lia.voice.blocked}
+            />
+            {!completed && (
+              <div className="mx-auto w-full max-w-3xl space-y-2 px-4 sm:px-8">
+                <TurnoIndicador
+                  turno={turnoAtual({
+                    liaFalando: lia.talking,
+                    pensando: triagem.carregando || triagem.pensando,
+                    interim: ouvido.interim,
+                    ouvindo: ouvido.listening,
+                    esperandoResposta: ["consentimento", "pergunta", "identificacao", "conferencia"].includes(triagem.fase),
+                  })}
+                  interim={ouvido.interim}
+                  libras={libras}
+                  podeInterromper={ouvido.listening}
+                />
+                <UserEcho userCaption={input.userCaption} />
+              </div>
+            )}
+            <TriagemPanel
+              key={triagem.fase}
+              libras={libras}
+              consentimento={triagem.consentimento}
+              identificacao={{
+                instrucao: triagem.textoIdentificacao,
+                rascunho: triagem.rascunho,
+                onMudar: triagem.mudarRascunho,
+                erro: triagem.erroIdentificacao,
+                onEnviar: (nome, cpf) => void triagem.identificar(nome, cpf),
+              }}
+              conferencia={{
+                resumo: triagem.conferencia,
+                onConfirmar: () => {
+                  input.mostrarResposta("Está tudo certo");
+                  void triagem.confirmarConferencia();
+                },
+                onCorrigir: (perguntaId) => {
+                  input.mostrarResposta("Quero corrigir");
+                  void triagem.corrigir(perguntaId);
+                },
+                onCorrigirIdentificacao: triagem.corrigirIdentificacao,
+              }}
+              fase={triagem.fase}
+              pergunta={triagem.pergunta}
+              finalizacao={triagem.finalizacao}
+              carregando={triagem.carregando}
+              onConsentir={(aceita) => {
+                input.mostrarResposta(aceita ? "Sim, concordo" : "Não");
+                void triagem.consentir(aceita);
+              }}
+              onResponder={(valor, rotulo) => {
+                input.mostrarResposta(rotulo);
+                void triagem.responderPergunta(valor, "toque");
+              }}
+              onRecomecar={() => {
+                input.mostrarResposta("");
+                triagem.recomecar();
+              }}
+            />
+          </div>
         </div>
+
+        {!completed && libras && <PhraseBar signs={signs} busy={triagem.carregando} />}
+
+        <footer className="shrink-0 border-t border-white/15 px-4 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+          <p className="text-center text-sm text-white/75">Precisa de ajuda? Procure a recepção.</p>
+        </footer>
       </div>
 
-      {!completed && libras && <PhraseBar signs={signs} busy={triagem.carregando} />}
-
-      <footer className="sticky bottom-0 z-30 shrink-0 border-t border-white/15 bg-tinta px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6">
-        {!completed && (
-          <CallControls
-            // Nova sessão = rodapé novo (fecha a digitação e apaga o rascunho).
-            key={active ? "sessao" : "inativo"}
-            libras={libras}
-            busy={triagem.carregando}
-            camera={{ on: cameraOn, requesting: cameraStatus === "requesting", toggle: cameraOn ? stopCamera : () => void startCamera() }}
-            onSwapPip={() => setPipSide((side) => (side === "right" ? "left" : "right"))}
-            input={input}
-            voice={lia.voice}
-            onEncerrar={() => {
-              signs.clearWords();
-              signs.clearSpelling();
-              triagem.recomecar();
-            }}
-            onOpenTrainer={onEnd ? undefined : () => setTrainerOpen(true)}
-          />
-        )}
-        <p className="mt-3 text-center text-base text-white/75">Precisa de ajuda? Procure a recepção.</p>
-      </footer>
+      {!completed && (
+        <CallControls
+          // Nova sessão fecha a digitação e apaga o rascunho.
+          key={active ? "sessao" : "inativo"}
+          libras={libras}
+          busy={triagem.carregando}
+          camera={{ on: cameraOn, requesting: cameraStatus === "requesting", toggle: cameraOn ? stopCamera : () => void startCamera() }}
+          onSwapPip={() => setPipSide((side) => (side === "right" ? "left" : "right"))}
+          input={input}
+          voice={lia.voice}
+          onEncerrar={() => {
+            signs.clearWords();
+            signs.clearSpelling();
+            triagem.recomecar();
+          }}
+          onOpenTrainer={onEnd ? undefined : () => setTrainerOpen(true)}
+        />
+      )}
 
       <SignTrainer
         open={trainerOpen}

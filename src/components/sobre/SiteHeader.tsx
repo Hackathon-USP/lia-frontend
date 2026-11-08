@@ -65,17 +65,17 @@ export function SiteHeader() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-tinta/10 bg-creme/95 pt-[env(safe-area-inset-top)] backdrop-blur">
-      <div className="mx-auto flex h-18 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto flex min-h-18 max-w-6xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-2 sm:px-6 lg:px-8 xl:flex-nowrap">
         <LiaLogo />
 
-        <nav aria-label="Seções da página" className="hidden xl:block">
-          <ul className="flex items-center gap-1">
+        <nav aria-label="Seções da página" className="hidden min-w-0 xl:block">
+          <ul className="flex flex-wrap items-center justify-center gap-1">
             {NAV.map((item) => (
               <li key={item.href}>
                 <a
                   href={item.href}
                   aria-current={isActive(item.href) ? "location" : undefined}
-                  className="rounded-full px-3 py-2 whitespace-nowrap text-tinta underline-offset-[6px] hover:bg-menta aria-[current=location]:bg-menta aria-[current=location]:font-bold aria-[current=location]:text-petroleo aria-[current=location]:underline aria-[current=location]:decoration-2"
+                  className="block rounded-full px-3 py-2 whitespace-nowrap text-tinta underline-offset-[6px] hover:bg-menta aria-[current=location]:bg-menta aria-[current=location]:font-bold aria-[current=location]:text-petroleo aria-[current=location]:underline aria-[current=location]:decoration-2"
                 >
                   {item.label}
                 </a>

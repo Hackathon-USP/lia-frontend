@@ -32,14 +32,14 @@ export function Historico({ onVerDetalhes }: { onVerDetalhes: (id: number) => vo
     <section aria-labelledby="historico-titulo" className="space-y-4 rounded-3xl bg-white p-5 shadow-sm sm:p-6">
       <h2 id="historico-titulo" className="text-xl font-bold">Buscar atendimentos</h2>
 
-      <form onSubmit={buscar} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_1fr_auto] lg:items-end">
+      <form onSubmit={buscar} className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-2 lg:grid-cols-[repeat(4,minmax(0,1fr))_auto] lg:items-end">
         <label className="flex flex-col gap-1 font-semibold">
           CPF
-          <input className={campo} inputMode="numeric" placeholder="com ou sem pontos" value={filtro.cpf ?? ""} onChange={(e) => mudar("cpf", e.target.value)} />
+          <input className={`${campo} min-w-0`} inputMode="numeric" placeholder="com ou sem pontos" value={filtro.cpf ?? ""} onChange={(e) => mudar("cpf", e.target.value)} />
         </label>
         <label className="flex flex-col gap-1 font-semibold">
           Data
-          <input className={campo} type="date" value={filtro.data ?? ""} onChange={(e) => mudar("data", e.target.value)} />
+          <input className={`${campo} min-w-0`} type="date" value={filtro.data ?? ""} onChange={(e) => mudar("data", e.target.value)} />
         </label>
         <label className="flex flex-col gap-1 font-semibold">
           Comunicação
@@ -71,40 +71,51 @@ export function Historico({ onVerDetalhes }: { onVerDetalhes: (id: number) => vo
         )}
         {resultado?.length === 0 && <p className="py-6 text-center text-tinta-suave">Nenhum atendimento encontrado.</p>}
         {resultado && resultado.length > 0 && (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[40rem] text-left">
-              <caption className="sr-only">Atendimentos encontrados</caption>
-              <thead className="text-sm text-tinta-suave">
-                <tr>
-                  <th className="py-2 pr-3 font-semibold">Senha</th>
-                  <th className="py-2 pr-3 font-semibold">Nome</th>
-                  <th className="py-2 pr-3 font-semibold">CPF</th>
-                  <th className="py-2 pr-3 font-semibold">Comunicação</th>
-                  <th className="py-2 pr-3 font-semibold">Início</th>
-                  <th className="py-2"><span className="sr-only">Ações</span></th>
+          <table role="table" className="block w-full text-left wrap-anywhere md:table">
+            <caption className="sr-only">Atendimentos encontrados</caption>
+            <thead role="rowgroup" className="sr-only text-sm text-tinta-suave md:not-sr-only md:table-header-group">
+              <tr role="row">
+                <th scope="col" className="py-2 pr-3 font-semibold">Senha</th>
+                <th scope="col" className="py-2 pr-3 font-semibold">Nome</th>
+                <th scope="col" className="py-2 pr-3 font-semibold">CPF</th>
+                <th scope="col" className="py-2 pr-3 font-semibold">Comunicação</th>
+                <th scope="col" className="py-2 pr-3 font-semibold">Início</th>
+                <th scope="col" className="py-2"><span className="sr-only">Ações</span></th>
+              </tr>
+            </thead>
+            <tbody role="rowgroup" className="block divide-y divide-tinta/10 md:table-row-group">
+              {resultado.map((a) => (
+                <tr key={a.id} role="row" className="grid grid-cols-2 gap-3 py-4 align-top md:table-row md:py-0">
+                  <td role="cell" className="block font-bold tabular-nums md:table-cell md:py-3 md:pr-3">
+                    <span aria-hidden="true" className="block text-xs text-tinta-suave md:hidden">Senha</span>
+                    {ouTraco(a.senha)}
+                  </td>
+                  <td role="cell" className="block space-y-1 md:table-cell md:py-3 md:pr-3">
+                    <span aria-hidden="true" className="block text-xs text-tinta-suave md:hidden">Nome</span>
+                    <div>{ouTraco(a.nome)}</div>
+                    <Alertas alertas={a.alertas} />
+                  </td>
+                  <td role="cell" className="block tabular-nums md:table-cell md:py-3 md:pr-3">
+                    <span aria-hidden="true" className="block text-xs text-tinta-suave md:hidden">CPF</span>
+                    {ouTraco(a.cpf)}
+                  </td>
+                  <td role="cell" className="block md:table-cell md:py-3 md:pr-3">
+                    <span aria-hidden="true" className="block text-xs text-tinta-suave md:hidden">Comunicação</span>
+                    <SeloModo modo={a.modo} />
+                  </td>
+                  <td role="cell" className="block md:table-cell md:py-3 md:pr-3">
+                    <span aria-hidden="true" className="block text-xs text-tinta-suave md:hidden">Início</span>
+                    {dataHora(a.criado_em)}
+                  </td>
+                  <td role="cell" className="block self-end md:table-cell md:py-3">
+                    <button type="button" onClick={() => onVerDetalhes(a.id)} className={`${btn} ${btnSecundario}`}>
+                      Detalhes
+                    </button>
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-tinta/10">
-                {resultado.map((a) => (
-                  <tr key={a.id} className="align-top">
-                    <td className="py-3 pr-3 font-bold tabular-nums">{ouTraco(a.senha)}</td>
-                    <td className="space-y-1 py-3 pr-3">
-                      <div>{ouTraco(a.nome)}</div>
-                      <Alertas alertas={a.alertas} />
-                    </td>
-                    <td className="py-3 pr-3 tabular-nums">{ouTraco(a.cpf)}</td>
-                    <td className="py-3 pr-3"><SeloModo modo={a.modo} /></td>
-                    <td className="py-3 pr-3">{dataHora(a.criado_em)}</td>
-                    <td className="py-3">
-                      <button type="button" onClick={() => onVerDetalhes(a.id)} className={`${btn} ${btnSecundario}`}>
-                        Detalhes
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </table>
         )}
       </div>
     </section>

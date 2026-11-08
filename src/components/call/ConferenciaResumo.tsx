@@ -30,7 +30,7 @@ export function ConferenciaResumo({ conferencia, identificacao, carregando, libr
 
       <ul aria-label="Suas respostas" className="space-y-3">
         {itens.map((item) => (
-          <li key={item.pergunta_id} className="flex items-center gap-4 rounded-2xl bg-white/10 px-5 py-4">
+          <li key={item.pergunta_id} className="flex flex-col items-start gap-3 rounded-2xl bg-white/10 px-4 py-4 @sm:flex-row @sm:items-center">
             <div className="min-w-0 flex-1">
               <p className="text-base font-semibold text-white/80">{item.titulo}</p>
               <p className="text-2xl font-bold break-words">{item.resposta}</p>
@@ -48,7 +48,7 @@ export function ConferenciaResumo({ conferencia, identificacao, carregando, libr
         ))}
       </ul>
 
-      <section aria-label="Seus dados" className="flex items-center gap-4 rounded-2xl bg-white/10 px-5 py-4">
+      <section aria-label="Seus dados" className="flex flex-col items-start gap-3 rounded-2xl bg-white/10 px-4 py-4 @sm:flex-row @sm:items-center">
         <dl className="min-w-0 flex-1 space-y-2">
           {identificacao.nome && <div>
             <dt className="text-base font-semibold text-white/80">Nome</dt>

@@ -1,9 +1,6 @@
 /* Classes compartilhadas pelos botões da chamada (alvos de toque grandes, foco visível em âmbar). */
 
-/** Botão do rodapé de controles. */
-export const controlBtn =
-  "inline-flex min-h-16 items-center justify-center gap-3 rounded-2xl border px-5 py-3 text-base font-semibold transition-colors focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ambar disabled:cursor-not-allowed disabled:opacity-50";
-/** Variações de cor do botão do rodapé. */
+/** Variações de cor dos controles laterais. */
 export const controlIdle = "border-white/25 bg-white/10 hover:bg-white/20";
 export const controlOn = "border-ambar bg-ambar text-tinta";
 

@@ -281,7 +281,7 @@ const SobrePage: NextPageWithLayout = () => {
 
       {/* 1. Hero */}
       <section aria-labelledby="hero-titulo" className="pt-12 pb-20 sm:pt-16 lg:pt-24 lg:pb-28">
-        <Container className="grid items-center gap-12 lg:grid-cols-[1.1fr_1fr]">
+        <Container className="grid grid-cols-[minmax(0,1fr)] items-center gap-12 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
           <div>
             <p className="inline-flex rounded-full bg-ambar px-4 py-1.5 font-bold text-tinta">
               Acessibilidade no atendimento do SUS
@@ -296,13 +296,13 @@ const SobrePage: NextPageWithLayout = () => {
             <div className="mt-10 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
               <a
                 href="#como-funciona"
-                className="inline-flex h-14 items-center justify-center rounded-full bg-petroleo px-8 text-lg font-bold text-white hover:bg-petroleo-escuro"
+                className="inline-flex min-h-14 items-center justify-center rounded-full bg-petroleo px-4 py-2 text-center text-lg font-bold text-white hover:bg-petroleo-escuro sm:px-8"
               >
                 Ver como funciona
               </a>
               <a
                 href="#contato"
-                className="inline-flex h-14 items-center justify-center rounded-full border-2 border-petroleo px-8 text-lg font-bold text-petroleo hover:bg-menta"
+                className="inline-flex min-h-14 items-center justify-center rounded-full border-2 border-petroleo px-4 py-2 text-center text-lg font-bold text-petroleo hover:bg-menta sm:px-8"
               >
                 Quero a LIA na minha cidade
               </a>
@@ -444,17 +444,17 @@ const SobrePage: NextPageWithLayout = () => {
           />
 
           <div className="mt-12 overflow-hidden rounded-[2rem] border border-tinta/10 bg-white">
-            <table className="w-full border-collapse text-left">
+            <table className="w-full table-fixed border-collapse text-left wrap-anywhere">
               <caption className="sr-only">Comparação entre o VLibras e a LIA em cinco aspectos</caption>
               <thead>
                 <tr className="bg-tinta text-white">
-                  <th scope="col" className="w-1/4 p-4 text-base font-bold sm:p-6 sm:text-lg">
+                  <th scope="col" className="w-1/4 p-2 text-base font-bold sm:p-6 sm:text-lg">
                     <span className="sr-only">Aspecto</span>
                   </th>
-                  <th scope="col" className="p-4 text-base font-bold sm:p-6 sm:text-lg">
+                  <th scope="col" className="p-2 text-base font-bold sm:p-6 sm:text-lg">
                     VLibras
                   </th>
-                  <th scope="col" className="bg-petroleo p-4 text-base font-bold sm:p-6 sm:text-lg">
+                  <th scope="col" className="bg-petroleo p-2 text-base font-bold sm:p-6 sm:text-lg">
                     LIA
                   </th>
                 </tr>
@@ -462,19 +462,19 @@ const SobrePage: NextPageWithLayout = () => {
               <tbody>
                 {COMPARATIVO.map((linha) => (
                   <tr key={linha.aspecto} className="border-t border-tinta/10 align-top">
-                    <th scope="row" className="p-4 font-bold text-tinta sm:p-6 sm:text-lg">
+                    <th scope="row" className="p-2 font-bold text-tinta sm:p-6 sm:text-lg">
                       {linha.aspecto}
                     </th>
-                    <td className="p-4 text-tinta-suave sm:p-6 sm:text-lg">
+                    <td className="p-2 text-tinta-suave sm:p-6 sm:text-lg">
                       <span className="flex gap-2">
                         <IconX className="mt-0.5 size-5 shrink-0 text-tinta-suave" />
-                        {linha.vlibras}
+                        <span className="min-w-0">{linha.vlibras}</span>
                       </span>
                     </td>
-                    <td className="bg-menta/60 p-4 text-tinta sm:p-6 sm:text-lg">
+                    <td className="bg-menta/60 p-2 text-tinta sm:p-6 sm:text-lg">
                       <span className="flex gap-2">
                         <IconCheck className="mt-0.5 size-5 shrink-0 text-petroleo" />
-                        {linha.lia}
+                        <span className="min-w-0">{linha.lia}</span>
                       </span>
                     </td>
                   </tr>
@@ -618,7 +618,7 @@ const SobrePage: NextPageWithLayout = () => {
 
       {/* 8. Contato */}
       <section id="contato" aria-labelledby="contato-titulo" className="bg-menta py-20 lg:py-28">
-        <Container className="grid gap-12 lg:grid-cols-[1fr_1.3fr]">
+        <Container className="grid grid-cols-[minmax(0,1fr)] gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
           <div>
             <SectionHeading
               id="contato-titulo"
@@ -679,7 +679,7 @@ function SiteFooter() {
 
 SobrePage.getLayout = function getLayout(page: ReactElement) {
   return (
-    <div className={`${atkinson.variable} lia-page min-h-dvh bg-creme font-atkinson text-tinta`}>
+    <div className={`${atkinson.variable} lia-page min-h-dvh bg-creme font-atkinson wrap-anywhere text-tinta`}>
       <a
         href="#conteudo"
         className="sr-only z-50 rounded-full bg-tinta px-5 py-3 font-bold text-white focus:not-sr-only focus:fixed focus:top-4 focus:left-4"

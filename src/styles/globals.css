@@ -119,10 +119,3 @@ body:has(.lia-page) {
 .lia-page section[id] {
   scroll-margin-top: 6rem;
 }
-
-/* No totem vertical, o avatar fica acima das respostas. */
-@media (orientation: portrait) {
-  .totem-content {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}

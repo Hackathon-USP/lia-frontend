@@ -27,10 +27,10 @@ export function PhraseBar({ signs, busy }: { signs: Signs; busy: boolean }) {
   return (
     <section aria-label="Sua frase em Libras" className="shrink-0 border-t border-white/10 bg-black/30 px-3 py-3 sm:px-6">
       <div className="mx-auto flex max-w-4xl flex-wrap items-center gap-2">
-        <div className="flex min-h-10 min-w-0 flex-1 flex-wrap items-center gap-2" aria-live="polite">
+        <div className="flex min-h-10 min-w-0 flex-[1_1_14rem] flex-wrap items-center gap-2" aria-live="polite">
           {signs.words.length ? (
             signs.words.map((w, i) => (
-              <span key={`${w}-${i}`} className="rounded-full bg-white px-3 py-1 font-bold text-tinta">
+              <span key={`${w}-${i}`} className="max-w-full rounded-full bg-white px-3 py-1 font-bold text-tinta">
                 {w}
               </span>
             ))
@@ -38,7 +38,7 @@ export function PhraseBar({ signs, busy }: { signs: Signs; busy: boolean }) {
             <span className="text-sm text-white/80">{readingHint(signs, spelling)}</span>
           )}
           {spelling && signs.status === "ready" && (
-            <span className="flex items-center gap-1 rounded-full border border-dashed border-ambar/70 px-3 py-1 font-bold tracking-widest text-ambar">
+            <span className="max-w-full rounded-2xl border border-dashed border-ambar/70 px-3 py-1 font-bold tracking-widest text-ambar">
               {signs.spelling.join("") || "…"}
               <span aria-hidden="true" className="motion-safe:animate-pulse">
                 _
@@ -58,7 +58,7 @@ export function PhraseBar({ signs, busy }: { signs: Signs; busy: boolean }) {
           )}
         </div>
         {spelling && signs.spelling.length > 0 && (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button type="button" onClick={signs.undoLetter} className={`${pillBtn} bg-white/15 hover:bg-white/25`}>
               Apagar letra
             </button>
@@ -68,7 +68,7 @@ export function PhraseBar({ signs, busy }: { signs: Signs; busy: boolean }) {
           </div>
         )}
         {signs.words.length > 0 && (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button type="button" onClick={signs.removeLastWord} className={`${pillBtn} bg-white/15 hover:bg-white/25`}>
               Apagar última
             </button>
