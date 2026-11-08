@@ -9,15 +9,19 @@ export interface Opcao {
   sinais: string[];
 }
 
+/** "triagem" = pergunta fixa; "lia" = pergunta complementar que a LIA (IA) criou para este paciente */
+export type OrigemPergunta = "triagem" | "lia";
+
 export interface Pergunta {
   id: string;
   texto: string;
-  /** Rótulo curto usado no resumo de conferência (ex.: "Onde dói"). Ausente em backs antigos. */
+  /** Rótulo curto, usado na conferência e nos resumos (ex.: "Onde dói", "Suor frio"). Ausente em backs antigos. */
   titulo?: string;
   tipo: "opcoes" | "escala";
   opcoes: Opcao[];
   minimo: number | null;
   maximo: number | null;
+  origem?: OrigemPergunta;
 }
 
 export interface Atendimento {

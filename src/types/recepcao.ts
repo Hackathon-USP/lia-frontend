@@ -40,6 +40,25 @@ export interface RespostaRotulada {
   /** Texto legível da opção escolhida (é este que se exibe) */
   resposta: string;
   canal: ModoAcessibilidade | null;
+  /** Pergunta complementar feita pela LIA (IA) */
+  da_lia?: boolean;
+}
+
+/**
+ * Relatório da triagem (sai segundos depois da senha). Escrito pela LIA com IA ou, sem IA, montado por regras.
+ * Não é diagnóstico nem classificação de risco: serve para a equipe já chegar sabendo o que conferir.
+ */
+export interface RelatorioTriagem {
+  queixa_principal: string;
+  resumo: string;
+  /** Sempre inclui os alertas automáticos da triagem */
+  sinais_de_alerta: string[];
+  pontos_a_confirmar: string[];
+  orientacao_recepcao: string;
+  /** "ia" = escrito pela LIA (GPT); "regras" = montado sem IA, só com as respostas */
+  gerado_por: "ia" | "regras";
+  modelo: string | null;
+  gerado_em: string;
 }
 
 export interface AtendimentoDetalhe extends AtendimentoResumo {
@@ -53,6 +72,8 @@ export interface AtendimentoDetalhe extends AtendimentoResumo {
     intensidade: number | null;
     desde_quando: string | null;
   } | null;
+  /** null enquanto o relatório é preparado (ou em atendimentos antigos) */
+  relatorio?: RelatorioTriagem | null;
 }
 
 /** POST /recepcao/chamar */
@@ -64,6 +85,7 @@ export interface Chamada {
   cpf: string | null;
   alertas: string[];
   resumo: string | null;
+  relatorio?: RelatorioTriagem | null;
 }
 
 /** Filtros de GET /recepcao/atendimentos */

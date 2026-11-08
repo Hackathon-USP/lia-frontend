@@ -46,6 +46,8 @@ export const API_ROUTES = {
     atendimentos: "/recepcao/atendimentos",
     /** GET — detalhe do paciente */
     atendimento: (id: number) => `/recepcao/atendimentos/${id}`,
+    /** POST — gera de novo o relatório da triagem (409 = atendimento não finalizado) */
+    relatorio: (id: number) => `/recepcao/atendimentos/${id}/relatorio`,
     /** PATCH {status} — concluir ou chamar uma senha específica */
     senha: (codigo: string) => `/recepcao/senhas/${encodeURIComponent(codigo)}`,
   },

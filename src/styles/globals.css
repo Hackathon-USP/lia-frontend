@@ -52,6 +52,33 @@ a svg {
   pointer-events: none;
 }
 
+/* ---------- Impressão do relatório da triagem (/recepcao) ---------- */
+
+/* "Imprimir relatório" marca o relatório e o <body>; só ele vai para o papel/PDF. */
+@media print {
+  body.imprimindo-relatorio * {
+    visibility: hidden !important;
+  }
+  body.imprimindo-relatorio [data-imprimir="sim"],
+  body.imprimindo-relatorio [data-imprimir="sim"] * {
+    visibility: visible !important;
+  }
+  body.imprimindo-relatorio [data-imprimir="sim"] {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    padding: 0;
+  }
+  /* O detalhe abre num diálogo com rolagem própria: no papel ele não pode cortar o texto. */
+  body.imprimindo-relatorio dialog[open],
+  body.imprimindo-relatorio dialog[open] > div {
+    position: static;
+    max-height: none;
+    overflow: visible;
+  }
+}
+
 /* ---------- Chamada /chat ---------- */
 
 /* Na chamada a LIA já sinaliza na tela principal: esconde o widget flutuante do VLibras. */

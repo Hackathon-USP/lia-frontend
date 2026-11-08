@@ -1,5 +1,6 @@
 import { hora, ouTraco } from "@/lib/recepcao/formatar";
 import type { Chamada } from "@/types";
+import { RelatorioTriagem } from "./RelatorioTriagem";
 import { Alertas, OrientacaoModo, SeloModo, SeloTipo } from "./Selos";
 import { btn, btnPrimario, btnSecundario } from "./estilos";
 
@@ -54,7 +55,22 @@ export function PainelChamada({ chamada, ninguemAguardando, ocupado, erro, onCha
             <Alertas alertas={chamada.alertas} />
             <OrientacaoModo modo={chamada.modo} />
 
-            {chamada.resumo && <p className="whitespace-pre-line rounded-xl bg-creme p-4 leading-relaxed">{chamada.resumo}</p>}
+            {chamada.atendimento_id && (
+              <div className="rounded-2xl border border-tinta/10">
+                <RelatorioTriagem
+                  key={chamada.senha.codigo}
+                  atendimentoId={chamada.atendimento_id}
+                  inicial={chamada.relatorio}
+                  identificacao={`Senha ${chamada.senha.codigo} · ${ouTraco(chamada.nome)}`}
+                />
+              </div>
+            )}
+            {chamada.resumo && !chamada.relatorio && (
+              <details className="rounded-xl bg-creme p-4">
+                <summary className="cursor-pointer font-semibold">Resumo automático</summary>
+                <p className="mt-2 whitespace-pre-line leading-relaxed">{chamada.resumo}</p>
+              </details>
+            )}
             {!chamada.atendimento_id && <p className="text-tinta-suave">Senha avulsa, sem triagem.</p>}
 
             <div className="flex flex-wrap gap-3">

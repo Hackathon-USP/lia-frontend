@@ -74,6 +74,8 @@ const TEXTOS_PADRAO: TextosTotem = {
 
 /** A partir desse tempo esperando o back, avisa que está demorando. */
 const LENTO_MS = 4000;
+/** A LIA sinaliza/fala isto antes da primeira pergunta que ela mesma criou para o paciente. */
+const PONTE_PERGUNTAS_DA_LIA = "Obrigada. Agora vou fazer mais algumas perguntas sobre o seu caso.";
 
 /* Falas da LIA na identificação (ela sinaliza em Libras e fala). O CPF nunca é lido em voz alta. */
 const IDENT = {
@@ -276,9 +278,14 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
         return;
       }
       if (at.proxima_pergunta) {
-        mudarPergunta(at.proxima_pergunta);
+        const proxima = at.proxima_pergunta;
+        // Perguntas da LIA (IA) vêm depois das fixas; ao passar de uma fixa para a primeira delas, ela avisa
+        // que vai perguntar mais (não ao voltar da conferência para corrigir, nem ao retomar a sessão).
+        const anterior = perguntaRef.current;
+        const primeiraDaLia = proxima.origem === "lia" && anterior !== null && anterior.origem !== "lia";
+        mudarPergunta(proxima);
         mudarFase("pergunta");
-        falarRef.current(at.proxima_pergunta.texto);
+        falarRef.current(primeiraDaLia ? `${PONTE_PERGUNTAS_DA_LIA} ${proxima.texto}` : proxima.texto);
         return;
       }
       if (at.identificado === false) {

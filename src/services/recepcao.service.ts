@@ -1,5 +1,5 @@
 import { API_ROUTES } from "@/routes";
-import type { AtendimentoDetalhe, AtendimentoResumo, Chamada, FiltroAtendimentos, ItemFila, Senha, StatusSenha } from "@/types";
+import type { AtendimentoDetalhe, AtendimentoResumo, Chamada, FiltroAtendimentos, ItemFila, RelatorioTriagem, Senha, StatusSenha } from "@/types";
 import { ApiError } from "@/types";
 import { api, query } from "./api";
 
@@ -33,6 +33,11 @@ export function buscarAtendimentos(filtro: FiltroAtendimentos = {}) {
 
 export function detalharAtendimento(id: number) {
   return api<AtendimentoDetalhe>(API_ROUTES.recepcao.atendimento(id));
+}
+
+/** Gera (de novo) o relatório da triagem. Com IA pode levar alguns segundos. */
+export function gerarRelatorio(id: number) {
+  return api<RelatorioTriagem>(API_ROUTES.recepcao.relatorio(id), { method: "POST" });
 }
 
 /** "Concluir" (finalizada) ou chamar uma senha específica (em_atendimento). 404 se a senha não for de hoje. */
