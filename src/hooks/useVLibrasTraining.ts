@@ -293,6 +293,14 @@ export function useVLibrasTraining(iframeRef: RefObject<HTMLIFrameElement | null
     [],
   );
 
+  function refreshAfterRecording() {
+    const known = new Set(signs.map((s) => s.gloss));
+    for (const gloss of savedSignList()) {
+      if (!known.has(gloss)) addSign(gloss);
+    }
+    if (lia) void refreshLocal(lia).catch((err) => addLog("erro", errorText(err)));
+  }
+
   /* ---------- geração ---------- */
 
   const selectedSigns = useMemo(() => signs.filter((s) => s.selected && s.vlibras), [signs]);
@@ -457,12 +465,14 @@ export function useVLibrasTraining(iframeRef: RefObject<HTMLIFrameElement | null
 
   return {
     ready: !!lia && !!player,
+    captureEngine: lia,
     engineError,
     playerError,
     signs,
     toggleSign,
     selectAll,
     addSign,
+    refreshAfterRecording,
     avatars,
     setAvatars,
     speeds,

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
 import type { ImportReport } from "@/lib/libras";
 import { ROUTES } from "@/routes";
 import type { RecordingState, RecordResult, VocabItem } from "@/hooks/useSignRecognition";
@@ -12,7 +12,8 @@ interface Props {
   open: boolean;
   onClose: () => void;
   /** lado da câmera: o painel abre do lado oposto para você continuar se vendo */
-  pipSide: PipSide;
+  pipSide?: PipSide;
+  cameraPreview?: ReactNode;
   cameraReady: boolean;
   vocab: VocabItem[];
   alphabetVocab: VocabItem[];
@@ -51,7 +52,7 @@ async function readTextMaybeGzip(file: File): Promise<string> {
 
 /** Painel para ensinar à LIA os sinais (e as letras) que ela deve reconhecer neste totem. */
 export function SignTrainer(props: Props) {
-  const { open, onClose, pipSide, cameraReady, recording } = props;
+  const { open, onClose, pipSide, cameraPreview, cameraReady, recording } = props;
   const dialogRef = useRef<HTMLDialogElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [set, setSet] = useState<TrainerSet>("sinais");
@@ -135,10 +136,11 @@ export function SignTrainer(props: Props) {
     <dialog
       ref={dialogRef}
       onClose={onClose}
+      onCancel={(event) => { if (busy) event.preventDefault(); }}
       aria-labelledby="trainer-title"
-      className={`fixed top-0 m-0 h-dvh max-h-none w-full max-w-md overflow-y-auto bg-tinta p-0 text-white shadow-2xl backdrop:bg-black/30 ${
-        pipSide === "right" ? "left-0" : "right-0 left-auto"
-      }`}
+      className={`fixed overflow-y-auto overscroll-contain bg-tinta p-0 text-white shadow-2xl backdrop:bg-black/45 ${cameraPreview
+        ? "inset-0 m-auto h-dvh max-h-none w-full max-w-2xl sm:h-fit sm:max-h-[calc(100dvh-2rem)] sm:rounded-3xl"
+        : `top-0 m-0 h-dvh max-h-none w-full max-w-md ${pipSide === "right" ? "left-0" : "right-0 left-auto"}`}`}
     >
       <div className="flex flex-col gap-5 p-5 sm:p-6">
         <div className="flex items-start justify-between gap-4">
@@ -160,7 +162,7 @@ export function SignTrainer(props: Props) {
           {tab("letras", "Letras (soletrar)")}
         </div>
 
-        {!cameraReady && (
+        {!cameraReady && !cameraPreview && (
           <p role="alert" className="rounded-2xl bg-red-700 p-3">
             Ligue a câmera e espere a leitura das mãos carregar para gravar.
           </p>
@@ -173,25 +175,47 @@ export function SignTrainer(props: Props) {
           </p>
         )}
 
-        {/* Contagem / gravação */}
-        <div aria-live="assertive" className="min-h-0">
-          {recording && (
-            <p className="rounded-2xl bg-ambar p-4 text-center text-xl font-bold text-tinta">
-              {recording.phase === "countdown"
-                ? `“${recording.label}” em ${recording.secondsLeft}…`
-                : `Gravando “${recording.label}”. ${set === "letras" ? "Segure a letra!" : "Faça o sinal!"}`}
-            </p>
-          )}
+        <div className={cameraPreview ? "sticky top-0 z-10 space-y-2 bg-tinta py-2" : undefined}>
+          {cameraPreview}
+          <div aria-live="assertive">
+            {recording && (
+              <p className="rounded-2xl bg-ambar px-3 py-2 text-center text-lg font-bold wrap-anywhere text-tinta">
+                {recording.phase === "countdown"
+                  ? `“${recording.label}” em ${recording.secondsLeft}…`
+                  : `Gravando “${recording.label}”. ${set === "letras" ? "Segure a letra!" : "Faça o sinal!"}`}
+              </p>
+            )}
+          </div>
+          <p aria-live="polite" className="text-white/90 empty:hidden">
+            {message}
+          </p>
         </div>
-        <p aria-live="polite" className="text-white/90 empty:hidden">
-          {message}
-        </p>
+
+        {set === "sinais" && (
+          <form onSubmit={handleAdd} className="flex gap-2">
+            <label htmlFor="new-sign" className="sr-only">
+              Novo sinal
+            </label>
+            <input
+              id="new-sign"
+              value={newSign}
+              onChange={(e) => setNewSign(e.target.value)}
+              placeholder="Novo sinal (ex.: tosse)"
+              maxLength={40}
+              disabled={busy}
+              className="min-h-11 min-w-0 flex-1 rounded-full border border-white/25 bg-white/10 px-4 text-white placeholder:text-white/70 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ambar"
+            />
+            <button type="submit" disabled={busy || !newSign.trim()} className={`${btn} bg-white text-tinta hover:bg-white/90`}>
+              Adicionar
+            </button>
+          </form>
+        )}
 
         <ul className="flex flex-col gap-2">
           {items.map(({ label, count, movimento, vlibras }) => (
             <li key={label} className="flex flex-wrap items-center gap-2 rounded-2xl bg-white/10 p-3">
               <div className="min-w-0 flex-1">
-                <p className="font-bold">
+                <p className="font-bold wrap-anywhere">
                   {label}
                   {movimento && <span className="ml-2 text-sm font-normal text-white/75">com movimento</span>}
                 </p>
@@ -223,25 +247,6 @@ export function SignTrainer(props: Props) {
         </ul>
 
         {set === "sinais" && (
-          <form onSubmit={handleAdd} className="flex gap-2">
-            <label htmlFor="new-sign" className="sr-only">
-              Novo sinal
-            </label>
-            <input
-              id="new-sign"
-              value={newSign}
-              onChange={(e) => setNewSign(e.target.value)}
-              placeholder="Novo sinal (ex.: tosse)"
-              maxLength={40}
-              className="min-h-11 min-w-0 flex-1 rounded-full border border-white/25 bg-white/10 px-4 text-white placeholder:text-white/70 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ambar"
-            />
-            <button type="submit" disabled={!newSign.trim()} className={`${btn} bg-white text-tinta hover:bg-white/90`}>
-              Adicionar
-            </button>
-          </form>
-        )}
-
-        {set === "sinais" && (
           <div className="flex flex-col gap-3 border-t border-white/15 pt-4">
             <h3 className="font-bold">Exemplos do avatar do VLibras</h3>
             <label className="flex items-center gap-3">
@@ -258,9 +263,11 @@ export function SignTrainer(props: Props) {
               <button type="button" onClick={() => void handleDownload()} disabled={busy} className={`${btn} bg-white/15 hover:bg-white/25`}>
                 Baixar do servidor
               </button>
-              <a href={ROUTES.treinar} target="_blank" rel="noreferrer" className={`${btn} bg-white/15 hover:bg-white/25`}>
-                Gerar exemplos com o avatar<span className="sr-only"> (abre em outra aba)</span>
-              </a>
+              {!cameraPreview && (
+                <a href={ROUTES.treinar} target="_blank" rel="noreferrer" className={`${btn} bg-white/15 hover:bg-white/25`}>
+                  Gerar exemplos com o avatar<span className="sr-only"> (abre em outra aba)</span>
+                </a>
+              )}
             </div>
             <p className="text-sm text-white/75">
               O avatar do VLibras sinaliza cada glosa e a LIA aprende com ele, sem precisar gravar ninguém. O totem baixa
@@ -270,10 +277,10 @@ export function SignTrainer(props: Props) {
         )}
 
         <div className="flex flex-wrap gap-2 border-t border-white/15 pt-4">
-          <button type="button" onClick={() => void handleExport()} className={`${btn} bg-white/15 hover:bg-white/25`}>
+          <button type="button" disabled={busy} onClick={() => void handleExport()} className={`${btn} bg-white/15 hover:bg-white/25`}>
             Exportar sinais
           </button>
-          <button type="button" onClick={() => fileRef.current?.click()} className={`${btn} bg-white/15 hover:bg-white/25`}>
+          <button type="button" disabled={busy} onClick={() => fileRef.current?.click()} className={`${btn} bg-white/15 hover:bg-white/25`}>
             Importar sinais
           </button>
           <input

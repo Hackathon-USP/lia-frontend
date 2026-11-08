@@ -12,6 +12,7 @@ import {
   type TrainingSign,
   type VLibrasAvatar,
 } from "@/hooks/useVLibrasTraining";
+import { CameraSignTrainer } from "./CameraSignTrainer";
 
 /** Tamanho em que o avatar é desenhado (CSS px); a tela mostra reduzido. */
 const PLAYER_W = 960;
@@ -156,6 +157,7 @@ export function TreinoScreen() {
   const previewRef = useRef<HTMLCanvasElement>(null);
   const t = useVLibrasTraining(iframeRef, previewRef);
   const [newSign, setNewSign] = useState("");
+  const [trainerOpen, setTrainerOpen] = useState(false);
   const running = t.run !== null;
 
   // Até o primeiro exemplo, a prévia explica o que vai aparecer nela.
@@ -198,7 +200,7 @@ export function TreinoScreen() {
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
           <h1 className="flex items-center gap-3 text-xl font-bold">
             <LiaLogo tom="claro" />
-            <span className="font-normal text-white/80">Treinar Libras com o VLibras</span>
+            <span className="font-normal text-white/80">Treinar Libras</span>
           </h1>
           <Link href={ROUTES.chat} className="rounded-xl px-4 py-2 font-semibold text-white hover:bg-white/10 focus-visible:outline-3 focus-visible:outline-ambar">
             Ir para o totem
@@ -208,6 +210,15 @@ export function TreinoScreen() {
 
       <main className="mx-auto grid max-w-7xl grid-cols-[minmax(0,1fr)] gap-6 px-4 py-6 wrap-anywhere sm:px-8 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
         <div className="space-y-6">
+          <Panel title="Ensinar sinais com a câmera">
+            <p className="mb-3 text-sm text-tinta-suave">
+              Grave seus próprios sinais e letras. Os exemplos ficam salvos neste navegador.
+            </p>
+            <button type="button" onClick={() => setTrainerOpen(true)} disabled={running || t.uploading || t.evaluating}
+              className={`${btn} ${btnPrimario}`}>
+              Ensinar sinais
+            </button>
+          </Panel>
           <Panel title="Avatar do VLibras">
             <AvatarStage iframeRef={iframeRef} overlay={overlay} />
             <p className="mt-3 text-sm text-tinta-suave">
@@ -467,6 +478,16 @@ export function TreinoScreen() {
           </Panel>
         </div>
       </main>
+      {trainerOpen && (
+        <CameraSignTrainer
+          engine={t.captureEngine}
+          engineError={t.engineError}
+          onClose={() => {
+            setTrainerOpen(false);
+            t.refreshAfterRecording();
+          }}
+        />
+      )}
     </div>
   );
 }

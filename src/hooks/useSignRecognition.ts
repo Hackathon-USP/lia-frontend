@@ -79,6 +79,8 @@ export interface RecordResult {
 }
 
 export interface SignRecognitionOptions {
+  /** Motor já carregado na página de treino (null enquanto carrega). */
+  captureEngine?: LiaVision | null;
   /** Vídeo da câmera do paciente */
   videoRef: RefObject<HTMLVideoElement | null>;
   /** Canvas por cima do vídeo onde desenhamos as mãos detectadas */
@@ -178,7 +180,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 /** Mesmo limiar que o motor usa para aceitar um sinal (confidenceThreshold padrão). */
 const LIVE_MIN_CONFIDENCE = 0.6;
 
-export function useSignRecognition({ videoRef, overlayRef, enabled, onPhrase }: SignRecognitionOptions) {
+export function useSignRecognition({ videoRef, overlayRef, enabled, onPhrase, captureEngine }: SignRecognitionOptions) {
   const [lia, setLia] = useState<LiaVision | null>(null);
   const [failed, setFailed] = useState(false);
   const [handsVisible, setHandsVisible] = useState(false);
@@ -200,12 +202,14 @@ export function useSignRecognition({ videoRef, overlayRef, enabled, onPhrase }: 
 
   const onPhraseRef = useRef(onPhrase);
   const recordingRef = useRef(false);
+  const recordingAbort = useRef<AbortController | null>(null);
   const missTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useEffect(() => {
     onPhraseRef.current = onPhrase;
   });
   useEffect(() => writeJSON(SIGNS_KEY, signList), [signList]);
+  useEffect(() => () => recordingAbort.current?.abort(), []);
 
   /** Recarrega contagens e modelos a partir das gravações (IndexedDB). */
   const refreshModel = useCallback(async (l: LiaVision) => {
@@ -219,10 +223,11 @@ export function useSignRecognition({ videoRef, overlayRef, enabled, onPhrase }: 
       const extra = Object.keys(byGloss).filter((g) => !isLetterGloss(g) && !list.includes(g));
       return extra.length ? [...list, ...extra] : list;
     });
+    if (captureEngine !== undefined) return; // A bancada grava quadros sem classificar sinais.
     if (vlibrasEnabledRef.current) await l.loadModel();
     else await l.loadModel({ samples: (await l.dataset.export()).samples.filter((x) => x.source !== "vlibras") });
     setHasTrainedSigns((l.model?.templates ?? 0) > 0 || !!l.letterModel);
-  }, []);
+  }, [captureEngine]);
 
   /**
    * Baixa do back as amostras novas (as geradas com o VLibras em /treinar). `full` baixa tudo de
@@ -246,21 +251,23 @@ export function useSignRecognition({ videoRef, overlayRef, enabled, onPhrase }: 
 
   // 1. Carrega o motor quando a câmera liga pela primeira vez (e os modelos das gravações salvas).
   useEffect(() => {
-    if (!enabled || lia) return;
+    if ((!enabled && !captureEngine) || lia || captureEngine === null) return;
     let cancelled = false;
-    loadLia()
+    (captureEngine ? Promise.resolve(captureEngine) : loadLia())
       .then(async (l) => {
         if (cancelled) return;
         setLia(l);
         await refreshModel(l).catch((err) => console.warn("[lia] não consegui ler as gravações salvas", err));
         // Em segundo plano: o back pode demorar para acordar e o totem já funciona com o que tem.
-        void syncFromServer(l).catch((err) => console.warn("[lia] não consegui baixar os exemplos do servidor", err));
+        if (!captureEngine) {
+          void syncFromServer(l).catch((err) => console.warn("[lia] não consegui baixar os exemplos do servidor", err));
+        }
       })
       .catch(() => !cancelled && setFailed(true));
     return () => {
       cancelled = true;
     };
-  }, [enabled, lia, refreshModel, syncFromServer]);
+  }, [enabled, lia, captureEngine, refreshModel, syncFromServer]);
 
   const sendPhrase = useCallback(() => {
     if (!lia) return;
@@ -356,19 +363,26 @@ export function useSignRecognition({ videoRef, overlayRef, enabled, onPhrase }: 
 
   const record = useCallback(
     async (label: string): Promise<RecordResult> => {
-      if (!lia) return { frames: 0, handsRatio: 0, warning: "A leitura das mãos ainda não carregou." };
+      if (!lia?.running) return { frames: 0, handsRatio: 0, warning: "A leitura das mãos ainda não carregou." };
+      if (recordingRef.current) return { frames: 0, handsRatio: 0, warning: "Já existe uma gravação em andamento." };
       const gloss = normalizeGloss(label);
       const letter = isLetterGloss(gloss);
+      const { recognizing } = lia;
+      const controller = new AbortController();
+      recordingAbort.current = controller;
       recordingRef.current = true;
       try {
         for (let s = COUNTDOWN_S; s > 0; s--) {
           setRecording({ label: gloss, phase: "countdown", secondsLeft: s });
           await sleep(1000);
+          controller.signal.throwIfAborted();
         }
         const ms = letter ? LETTER_CAPTURE_MS : CAPTURE_MS;
         setRecording({ label: gloss, phase: "capturing", secondsLeft: Math.ceil(ms / 1000) });
         lia.setRecognizing(false); // não reconhece o que está sendo gravado
-        const sample = await lia.dataset.recordSample(gloss, { signer, durationMs: ms, origin: "totem" });
+        const sample = await lia.dataset.recordSample(gloss, {
+          signer, durationMs: ms, origin: "totem", signal: controller.signal,
+        });
         let warning: string | undefined;
         if (sample.quality.handsRatio < 0.5) warning = "Vi pouco as suas mãos. Grave de novo com as mãos bem visíveis.";
         else if (letter && !letterCandidateFromSample(sample)) warning = "A mão não ficou parada no fim. Grave de novo segurando a letra até acabar.";
@@ -377,8 +391,9 @@ export function useSignRecognition({ videoRef, overlayRef, enabled, onPhrase }: 
       } catch (err) {
         return { frames: 0, handsRatio: 0, warning: `Não foi possível gravar: ${(err as Error)?.message ?? err}` };
       } finally {
-        lia.setRecognizing(true);
+        lia.setRecognizing(recognizing);
         recordingRef.current = false;
+        recordingAbort.current = null;
         setRecording(null);
       }
     },
@@ -387,7 +402,7 @@ export function useSignRecognition({ videoRef, overlayRef, enabled, onPhrase }: 
 
   const addSign = useCallback((label: string) => {
     const gloss = normalizeGloss(label);
-    if (gloss && !isLetterGloss(gloss)) setSignList((list) => (list.includes(gloss) ? list : [...list, gloss]));
+    if (gloss && !isLetterGloss(gloss)) setSignList((list) => (list.includes(gloss) ? list : [gloss, ...list]));
   }, []);
 
   const deleteSign = useCallback(

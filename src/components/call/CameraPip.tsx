@@ -3,7 +3,7 @@ import type { CameraStatus } from "@/hooks/useCamera";
 
 export type PipSide = "left" | "right";
 
-const HINT: Partial<Record<CameraStatus, string>> = {
+export const CAMERA_HINT: Partial<Record<CameraStatus, string>> = {
   idle: "Câmera desligada",
   requesting: "Permita a câmera no navegador",
   denied: "Câmera bloqueada. Libere no cadeado ao lado do endereço.",
@@ -45,7 +45,7 @@ export function CameraPip({
         </figcaption>
       ) : (
         <figcaption className="grid min-h-16 place-items-center px-2 py-1.5 text-center text-xs sm:min-h-20">
-          <span role={problem ? "alert" : undefined} className={problem ? "text-red-300" : "text-white/85"}>{HINT[status]}</span>
+          <span role={problem ? "alert" : undefined} className={problem ? "text-red-300" : "text-white/85"}>{CAMERA_HINT[status]}</span>
         </figcaption>
       )}
     </figure>
