@@ -5,8 +5,8 @@ export default function Document() {
     <Html lang="pt-BR">
       <Head>
         <meta name="description" content="LIA — atendimento em Libras para unidades de saúde" />
-        <link rel="icon" type="image/jpeg" href="/assets/icon.jpeg" />
-        <link rel="apple-touch-icon" href="/assets/icon.jpeg" />
+        <link rel="icon" type="image/jpeg" href="/assets/favicon.jpg" />
+        <link rel="apple-touch-icon" href="/assets/favicon.jpg" />
       </Head>
       <body>
         <Main />
