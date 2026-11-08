@@ -1,10 +1,12 @@
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { alignGlossToWords, type WordRange } from "@/lib/libras/alignCaption";
 import { env } from "@/config/env";
 import { ROUTES } from "@/routes";
 import { useCamera } from "@/hooks/useCamera";
+import { useListening, type ListenError } from "@/hooks/useListening";
 import { useSignRecognition } from "@/hooks/useSignRecognition";
+import { useSpeech } from "@/hooks/useSpeech";
 import { useTriagem } from "@/hooks/useTriagem";
 import { useVLibrasPlayer, VLIBRAS_PLAYER_SRC } from "@/hooks/useVLibrasPlayer";
 import { MAX_MESSAGE_LENGTH, translateToGloss } from "@/services";
@@ -48,6 +50,32 @@ const IconHand = () => (
     <path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.9-6-2.3l-3.6-3.6a2 2 0 0 1 2.8-2.8L7 15" />
   </Svg>
 );
+const IconVoiceOn = () => (
+  <Svg>
+    <path d="M11 5 6 9H2v6h4l5 4V5z" />
+    <path d="M15.5 8.5a5 5 0 0 1 0 7" />
+    <path d="M19 5a10 10 0 0 1 0 14" />
+  </Svg>
+);
+const IconVoiceOff = () => (
+  <Svg>
+    <path d="M11 5 6 9H2v6h4l5 4V5z" />
+    <path d="m22 9-6 6M16 9l6 6" />
+  </Svg>
+);
+const IconMic = () => (
+  <Svg>
+    <rect x="9" y="2" width="6" height="12" rx="3" />
+    <path d="M5 10a7 7 0 0 0 14 0M12 17v5M8 22h8" />
+  </Svg>
+);
+const IconMicOff = () => (
+  <Svg>
+    <path d="M15 9.3V5a3 3 0 0 0-5.7-1.3M9 9v2a3 3 0 0 0 5 2.2" />
+    <path d="M19 10a7 7 0 0 1-1.1 3.8M5 10a7 7 0 0 0 11.4 5.4M12 17v5M8 22h8" />
+    <path d="m2 2 20 20" />
+  </Svg>
+);
 const IconSend = () => (
   <Svg>
     <path d="M22 2 11 13" />
@@ -64,19 +92,37 @@ const IconEnd = () => (
  * Legenda da LIA com destaque na palavra que está sendo sinalizada agora.
  * O que já foi sinalizado fica normal; o que ainda vem, um pouco mais apagado.
  */
-function LiaCaption({ text, gloss, glossIndex, playing }: { text: string; gloss: string; glossIndex: number; playing: boolean }) {
+function LiaCaption({
+  text,
+  gloss,
+  glossIndex,
+  playing,
+  voiceWord,
+  label = "LIA",
+}: {
+  label?: string;
+  text: string;
+  gloss: string;
+  glossIndex: number;
+  playing: boolean;
+  /** Palavra que a voz está falando agora (tem prioridade sobre os sinais) */
+  voiceWord: number | null;
+}) {
   const words = useMemo(() => text.split(/\s+/).filter(Boolean), [text]);
   const ranges = useMemo(() => (gloss ? alignGlossToWords(words, gloss.split(/\s+/)) : []), [words, gloss]);
 
-  // Sinal atual; marcações ([PONTO], [INTERROGAÇÃO]) mantêm o destaque anterior.
   let current: WordRange | null = null;
-  if (playing && glossIndex >= 0) {
+  if (voiceWord !== null) {
+    // Com voz: destaca a palavra falada (voz e legenda juntas).
+    current = { start: voiceWord, end: voiceWord };
+  } else if (playing && glossIndex >= 0) {
+    // Sem voz: segue os sinais; marcações ([PONTO], [INTERROGAÇÃO]) mantêm o destaque anterior.
     for (let i = Math.min(glossIndex, ranges.length - 1); i >= 0 && !current; i--) current = ranges[i];
   }
 
   return (
     <p className="max-w-3xl rounded-2xl bg-tinta/90 px-5 py-3 text-center text-lg leading-relaxed text-white shadow-lg sm:text-2xl">
-      <span className="font-bold text-ambar">LIA: </span>
+      <span className="font-bold text-ambar">{label}: </span>
       {words.map((w, i) => {
         const isCurrent = current !== null && i >= current.start && i <= current.end;
         const isFuture = current !== null && i > current.end;
@@ -96,6 +142,15 @@ function LiaCaption({ text, gloss, glossIndex, playing }: { text: string; gloss:
   );
 }
 
+const LISTEN_ERROR: Record<ListenError, string> = {
+  "sem-permissao": "Libere o microfone no navegador (ícone do cadeado na barra de endereço) para a LIA ouvir você.",
+  "sem-microfone": "Nenhum microfone encontrado neste aparelho.",
+  "sem-internet": "Sem internet para entender a voz. Use Libras ou o toque na tela.",
+};
+
+/** Se o avatar não começar a sinalizar nesse tempo, a voz fala mesmo assim. */
+const SPEECH_FALLBACK_MS = 3000;
+
 const roundBtn =
   "inline-flex size-12 shrink-0 items-center justify-center rounded-full focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ambar sm:size-14";
 const pillBtn =
@@ -109,7 +164,7 @@ const pillBtn =
  */
 export function CallScreen() {
   const { videoRef, status: cameraStatus, start: startCamera, stop: stopCamera, isActive: cameraOn } = useCamera();
-  const { iframeRef, ready, loadProgress, playing, failed, glossIndex, play } = useVLibrasPlayer(env.liaAvatar);
+  const { iframeRef, ready, loadProgress, playing, preparing, failed, glossIndex, play } = useVLibrasPlayer(env.liaAvatar);
   const overlayRef = useRef<HTMLCanvasElement>(null);
   const [pipSide, setPipSide] = useState<PipSide>("right");
   const [trainerOpen, setTrainerOpen] = useState(false);
@@ -120,19 +175,75 @@ export function CallScreen() {
   const [translateError, setTranslateError] = useState(false);
   const greeted = useRef(false);
 
-  /** Faz a LIA sinalizar (e legendar) um texto em português. */
-  async function speak(text: string) {
+  const voz = useSpeech();
+  const { speak: say, stop: hush } = voz;
+  /** Texto esperando o avatar começar para ser falado. */
+  const pendingSpeech = useRef<string | null>(null);
+  const speechFallback = useRef<ReturnType<typeof setTimeout>>(undefined);
+  /** A pessoa tocou em "Começar" (o toque também libera o som no navegador). */
+  const [started, setStarted] = useState(false);
+
+  /** Fala o texto que estava esperando (de uma vez, sem pausas entre as frases). */
+  const flushSpeech = useCallback(() => {
+    const text = pendingSpeech.current;
+    pendingSpeech.current = null;
+    clearTimeout(speechFallback.current);
+    if (text) say(text);
+  }, [say]);
+
+  /** Modo intérprete: o que a LIA ouve no microfone ela passa para Libras (sem responder a triagem). */
+  const [interprete, setInterprete] = useState(false);
+  /** A legenda atual é uma tradução da fala da pessoa (a LIA não fala em voz alta). */
+  const [captionIsTranslation, setCaptionIsTranslation] = useState(false);
+
+  /**
+   * Faz a LIA sinalizar e legendar um texto em português.
+   * Com `voice`, ela também fala em voz alta (respostas dela); sem, só sinaliza (tradução da fala de alguém).
+   */
+  async function speak(text: string, voice = true) {
     setLiaCaption(text);
     setLiaGloss("");
+    setCaptionIsTranslation(!voice);
     setTranslateError(false);
+    hush();
+    pendingSpeech.current = null;
+    clearTimeout(speechFallback.current);
     try {
       const gloss = await translateToGloss(text);
       setLiaGloss(gloss);
+      if (voice) {
+        // A voz começa junto com o avatar (efeito abaixo); se ele não começar, fala mesmo assim.
+        pendingSpeech.current = text;
+        speechFallback.current = setTimeout(flushSpeech, SPEECH_FALLBACK_MS);
+      }
       play(gloss);
     } catch {
       setTranslateError(true);
+      if (voice) say(text); // sem Libras, ao menos a voz e a legenda
     }
   }
+
+  // A voz começa quando o avatar começa a sinalizar e segue sem pausas.
+  useEffect(() => {
+    if (playing) flushSpeech();
+  }, [playing, flushSpeech]);
+
+  useEffect(() => () => clearTimeout(speechFallback.current), []);
+
+  // Palavra da legenda que a voz está falando agora (posição da frase falada dentro da legenda).
+  const voiceWord = useMemo(() => {
+    const p = voz.progress;
+    if (!p || !liaCaption || captionIsTranslation || !voz.enabled || !(voz.speaking || playing)) return null;
+    const base = liaCaption.indexOf(p.text);
+    if (base < 0) return null;
+    const abs = base + p.char;
+    let index = -1;
+    for (const m of liaCaption.matchAll(/\S+/g)) {
+      if ((m.index ?? 0) > abs) break;
+      index++;
+    }
+    return index >= 0 ? index : null;
+  }, [voz.progress, voz.speaking, voz.enabled, playing, liaCaption, captionIsTranslation]);
 
   // Triagem no back: cada pergunta/mensagem do back a LIA sinaliza.
   const triagem = useTriagem({ falar: (texto) => void speak(texto), modo: "libras" });
@@ -144,6 +255,21 @@ export function CallScreen() {
     setUserCaption(command);
     void triagem.entrada(command, canal);
   }
+
+  // A LIA ouvindo pelo microfone. Pausa enquanto ela fala, para não ouvir a própria voz.
+  const ouvido = useListening({
+    paused: !started || voz.speaking,
+    onFinal: (text) => {
+      if (trainerOpen) return;
+      if (interprete) {
+        // Intérprete: a fala vira Libras no avatar, com a legenda em português.
+        setUserCaption(text);
+        void speak(text, false);
+      } else {
+        handleCommand(text, "voz");
+      }
+    },
+  });
 
   const signs = useSignRecognition({
     videoRef,
@@ -160,13 +286,14 @@ export function CallScreen() {
     void startCamera();
   }, [startCamera]);
 
-  // Começa o atendimento (boas-vindas + consentimento) assim que o avatar carrega.
+  // Começa o atendimento (boas-vindas + consentimento) depois do toque em "Começar"
+  // e com o avatar carregado.
   useEffect(() => {
-    if (!ready || greeted.current) return;
+    if (!ready || !started || greeted.current) return;
     greeted.current = true;
     void triagem.comecar();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- só uma vez, quando o player fica pronto
-  }, [ready]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- só uma vez, quando os dois estão prontos
+  }, [ready, started]);
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -247,18 +374,57 @@ export function CallScreen() {
         >
           <span aria-hidden="true" className={`size-2.5 rounded-full ${ready ? "bg-emerald-400" : "bg-ambar"}`} />
           <span className="font-bold">LIA</span>
-          <span className="text-sm text-white/85">{playing ? "sinalizando" : ready ? "ao vivo" : "conectando"}</span>
+          <span className="text-sm text-white/85">
+            {preparing
+              ? "preparando os sinais…"
+              : playing
+                ? "sinalizando"
+                : !ready
+                  ? "conectando"
+                  : ouvido.listening
+                    ? interprete
+                      ? "traduzindo sua fala"
+                      : "ouvindo você"
+                    : "ao vivo"}
+          </span>
         </div>
+
+        {/* Tela inicial do totem: o toque começa o atendimento e libera o som no navegador. */}
+        {!started && (
+          <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-6 bg-tinta/70 p-6 text-center text-white backdrop-blur-sm">
+            <p className="text-3xl font-bold sm:text-5xl">Olá! Eu sou a LIA.</p>
+            <p className="max-w-xl text-lg text-white/90 sm:text-2xl">Atendimento em Libras, por voz ou pelo toque na tela.</p>
+            <button
+              type="button"
+              autoFocus
+              onClick={() => {
+                setStarted(true);
+                ouvido.start(); // no totem a LIA já começa ouvindo (o navegador pede o microfone)
+              }}
+              className="min-h-16 rounded-full bg-ambar px-10 text-xl font-bold text-tinta shadow-xl hover:bg-ambar/90 focus-visible:outline-4 focus-visible:outline-offset-4 focus-visible:outline-white sm:text-2xl"
+            >
+              Toque para começar
+            </button>
+            {!ready && !failed && <p className="text-sm text-white/80">Preparando a LIA…</p>}
+          </div>
+        )}
 
         <CameraPip videoRef={videoRef} overlayRef={overlayRef} status={cameraStatus} side={pipSide} handsVisible={signs.handsVisible} />
 
         {/* Legendas */}
         <div className="absolute inset-x-0 bottom-4 z-10 flex flex-col items-center gap-2 px-4" aria-live="polite">
-          {userCaption && (
-            <p className="max-w-2xl rounded-2xl bg-tinta/75 px-4 py-2 text-center text-white">
-              <span className="font-bold">Você: </span>
-              {userCaption}
+          {ouvido.interim ? (
+            <p className="max-w-2xl rounded-2xl bg-tinta/75 px-4 py-2 text-center text-white/85 italic">
+              <span className="font-bold not-italic">Você: </span>
+              {ouvido.interim}…
             </p>
+          ) : (
+            userCaption && (
+              <p className="max-w-2xl rounded-2xl bg-tinta/75 px-4 py-2 text-center text-white">
+                <span className="font-bold">Você: </span>
+                {userCaption}
+              </p>
+            )
           )}
           {triagem.carregando && (
             <p className="rounded-2xl bg-tinta/85 px-4 py-2 text-white">
@@ -266,7 +432,19 @@ export function CallScreen() {
             </p>
           )}
           {liaCaption && !triagem.carregando && (
-            <LiaCaption text={liaCaption} gloss={liaGloss} glossIndex={glossIndex} playing={playing} />
+            <LiaCaption
+              label={captionIsTranslation ? "Em Libras" : "LIA"}
+              text={liaCaption}
+              gloss={liaGloss}
+              glossIndex={glossIndex}
+              playing={playing}
+              voiceWord={voiceWord}
+            />
+          )}
+          {ouvido.error && (
+            <p role="alert" className="max-w-2xl rounded-2xl bg-tinta/90 px-4 py-2 text-center text-white">
+              {LISTEN_ERROR[ouvido.error]}
+            </p>
           )}
           {triagem.erro && (
             <p role="alert" className="flex flex-wrap items-center justify-center gap-3 rounded-2xl bg-red-700 px-4 py-2 text-white">
@@ -279,6 +457,9 @@ export function CallScreen() {
                 Tentar de novo
               </button>
             </p>
+          )}
+          {voz.enabled && voz.blocked && (
+            <p className="rounded-full bg-tinta/85 px-4 py-1 text-sm text-white">Toque na tela para ouvir a voz da LIA.</p>
           )}
           {translateError && !triagem.erro && (
             <p role="alert" className="rounded-2xl bg-red-700 px-4 py-2 text-white">
@@ -377,6 +558,70 @@ export function CallScreen() {
             <span className="sr-only">{cameraOn ? "Desligar câmera" : "Ligar câmera"}</span>
           </button>
 
+          {voz.supported && (
+            <button
+              type="button"
+              onClick={voz.toggle}
+              aria-pressed={voz.enabled}
+              className={`${roundBtn} ${voz.enabled ? "bg-white/15 hover:bg-white/25" : "bg-white text-tinta hover:bg-white/90"}`}
+            >
+              {voz.enabled ? <IconVoiceOn /> : <IconVoiceOff />}
+              <span className="sr-only">Voz da LIA</span>
+            </button>
+          )}
+
+          {/* Microfone: a LIA ouve a fala (responde a triagem ou, no modo intérprete, traduz para Libras). */}
+          {ouvido.supported && (
+            <>
+              <button
+                type="button"
+                onClick={ouvido.toggle}
+                aria-pressed={ouvido.wanted}
+                className={`${roundBtn} relative ${ouvido.wanted ? "bg-white/15 hover:bg-white/25" : "bg-white text-tinta hover:bg-white/90"}`}
+              >
+                {ouvido.wanted ? <IconMic /> : <IconMicOff />}
+                {ouvido.listening && (
+                  <span aria-hidden="true" className="absolute top-1.5 right-1.5 size-2.5 rounded-full bg-emerald-400 motion-safe:animate-pulse" />
+                )}
+                <span className="sr-only">{ouvido.wanted ? "Desligar microfone" : "Ligar microfone"}</span>
+              </button>
+              {ouvido.wanted && (
+                <button
+                  type="button"
+                  aria-pressed={interprete}
+                  onClick={() => setInterprete((v) => !v)}
+                  className={`${roundBtn} w-auto px-4 text-sm font-semibold sm:w-auto ${
+                    interprete ? "bg-ambar text-tinta hover:bg-ambar/90" : "bg-white/15 hover:bg-white/25"
+                  }`}
+                >
+                  Intérprete
+                  <span className="sr-only"> (passar minha fala para Libras)</span>
+                </button>
+              )}
+            </>
+          )}
+
+          {/* Escolha da voz: ao trocar, ela fala um teste (para conferir o alto-falante). */}
+          {voz.supported && voz.enabled && voz.voices.length > 1 && (
+            <>
+              <label htmlFor="voz-lia" className="sr-only">
+                Escolher a voz da LIA
+              </label>
+              <select
+                id="voz-lia"
+                value={voz.voiceName ?? ""}
+                onChange={(e) => voz.chooseVoice(e.target.value)}
+                className="hidden h-12 max-w-48 rounded-full border border-white/25 bg-white/10 px-3 text-sm text-white focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-ambar sm:h-14 lg:block"
+              >
+                {voz.voices.map((v) => (
+                  <option key={v.id} value={v.id} className="text-tinta">
+                    {v.label}
+                  </option>
+                ))}
+              </select>
+            </>
+          )}
+
           <button type="button" onClick={() => setPipSide((s) => (s === "right" ? "left" : "right"))} className={`${roundBtn} bg-white/15 hover:bg-white/25`}>
             <IconSwap />
             <span className="sr-only">Mover minha câmera para a {pipSide === "right" ? "esquerda" : "direita"}</span>
@@ -397,7 +642,7 @@ export function CallScreen() {
             type="button"
             aria-pressed={spelling}
             onClick={() => signs.setMode(spelling ? "sinais" : "datilologia")}
-            className={`${roundBtn} w-auto gap-2 px-4 font-semibold ${spelling ? "bg-ambar text-tinta hover:bg-ambar/90" : "bg-white/15 hover:bg-white/25"}`}
+            className={`${roundBtn} w-auto gap-2 px-4 font-semibold sm:w-auto ${spelling ? "bg-ambar text-tinta hover:bg-ambar/90" : "bg-white/15 hover:bg-white/25"}`}
           >
             <span aria-hidden="true" className="font-bold tracking-wider">
               ABC

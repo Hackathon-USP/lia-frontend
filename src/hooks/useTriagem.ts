@@ -3,6 +3,7 @@ import {
   acordarBack,
   buscarTextos,
   consultarAtendimento,
+  entenderFala,
   escolherValor,
   finalizarAtendimento,
   iniciarAtendimento,
@@ -205,7 +206,7 @@ export function useTriagem({ falar, modo = "libras" }: UseTriagemOptions) {
     [aplicar, chamar],
   );
 
-  /** Entrada livre: frase sinalizada em Libras ou texto digitado. */
+  /** Entrada livre: frase sinalizada em Libras, falada no microfone ou digitada. */
   const entrada = useCallback(
     async (frase: string, canal: ModoAcessibilidade) => {
       const texto = frase.trim();
@@ -217,7 +218,10 @@ export function useTriagem({ falar, modo = "libras" }: UseTriagemOptions) {
         return;
       }
       const p = perguntaRef.current;
-      if (faseRef.current === "pergunta" && p) await responderPergunta(escolherValor(p, texto), canal);
+      if (faseRef.current !== "pergunta" || !p) return;
+      // Libras chega como glosas (DOR CABEÇA); voz e texto digitado chegam em português livre.
+      const valor = canal === "libras" ? escolherValor(p, texto) : entenderFala(p, texto);
+      await responderPergunta(valor, canal);
     },
     [consentir, responderPergunta],
   );
