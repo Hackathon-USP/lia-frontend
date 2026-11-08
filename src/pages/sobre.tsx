@@ -149,6 +149,17 @@ const LINHA_DO_TEMPO = [
   { titulo: "Outros serviços públicos", texto: "Cartórios, INSS e bancos." },
 ];
 
+/*
+ * Founders. PROVISÓRIO: troque nome, papel, frase e foto.
+ * Fotos: coloque o arquivo em public/assets/equipe/ (quadrado, ex.: 600x600) e aponte `foto` para ele.
+ */
+const FOTO_EQUIPE = "/assets/equipe/foto-equipe.svg"; // troque por uma foto 16:9 da equipe
+const FOUNDERS = [
+  { nome: "Nome do founder", papel: "Cofundador", frase: "Uma frase sobre o que move essa pessoa na LIA.", foto: "/assets/equipe/foto-pessoa.svg" },
+  { nome: "Nome do founder", papel: "Cofundadora", frase: "Uma frase sobre o que move essa pessoa na LIA.", foto: "/assets/equipe/foto-pessoa.svg" },
+  { nome: "Nome do founder", papel: "Cofundador", frase: "Uma frase sobre o que move essa pessoa na LIA.", foto: "/assets/equipe/foto-pessoa.svg" },
+];
+
 /* ---------- Peças de layout ---------- */
 
 function Container({ children, className = "" }: { children: ReactNode; className?: string }) {
@@ -534,6 +545,37 @@ const SobrePage: NextPageWithLayout = () => {
               </li>
             ))}
           </ol>
+        </Container>
+      </section>
+
+      {/* Quem faz a LIA */}
+      <section id="equipe" aria-labelledby="equipe-titulo" className="bg-white py-20 lg:py-28">
+        <Container>
+          <SectionHeading
+            id="equipe-titulo"
+            eyebrow="Quem faz a LIA"
+            title="As pessoas por trás da LIA."
+            intro="Um time que juntou tecnologia, saúde e acessibilidade para que ninguém precise de intérprete para ser atendido."
+          />
+
+          <figure className="mt-12 overflow-hidden rounded-4xl bg-menta">
+            {/* eslint-disable-next-line @next/next/no-img-element -- foto local; trocar o arquivo não exige mudar o código */}
+            <img src={FOTO_EQUIPE} alt="Os founders da LIA" width={1600} height={900} className="aspect-video w-full object-cover" />
+          </figure>
+
+          <ul className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {FOUNDERS.map((f, i) => (
+              <li key={i} className="flex gap-5 rounded-3xl border border-tinta/10 bg-creme p-6">
+                {/* eslint-disable-next-line @next/next/no-img-element -- foto local; trocar o arquivo não exige mudar o código */}
+                <img src={f.foto} alt={`Foto de ${f.nome}`} width={96} height={96} className="size-24 shrink-0 rounded-2xl object-cover" />
+                <div>
+                  <p className="text-xl font-bold text-tinta">{f.nome}</p>
+                  <p className="font-semibold text-petroleo">{f.papel}</p>
+                  <p className="mt-2 leading-relaxed text-tinta-suave">{f.frase}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
         </Container>
       </section>
 
