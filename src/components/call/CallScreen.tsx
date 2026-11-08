@@ -9,7 +9,7 @@ import { AvatarStage } from "./AvatarStage";
 import { CallControls } from "./CallControls";
 import { CallStatus, UserEcho } from "./CallStatus";
 import { CameraPip, type PipSide } from "./CameraPip";
-import { liaStatusLabel } from "./liaStatus";
+import { liaStatusLabel, signRecognitionLabel } from "./liaStatus";
 import { PhraseBar } from "./PhraseBar";
 import { SignTrainer } from "./SignTrainer";
 import { TriagemPanel } from "./TriagemPanel";
@@ -95,7 +95,13 @@ export function CallScreen({ modo = "libras", active = true, onEnd }: Props) {
             hideTranslateError={!!triagem.erro}
           >
             <div className={!libras ? "hidden" : pipSide === "left" ? "order-first shrink-0" : "shrink-0"}>
-              <CameraPip videoRef={videoRef} overlayRef={overlayRef} status={cameraStatus} handsVisible={signs.handsVisible} />
+              <CameraPip
+                videoRef={videoRef}
+                overlayRef={overlayRef}
+                status={cameraStatus}
+                handsVisible={signs.handsVisible}
+                recognitionLabel={completed ? undefined : signRecognitionLabel(signs, triagem.carregando)}
+              />
             </div>
           </AvatarStage>
 

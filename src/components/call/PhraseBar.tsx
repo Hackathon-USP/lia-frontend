@@ -35,7 +35,9 @@ export function PhraseBar({ signs, busy }: { signs: Signs; busy: boolean }) {
               </span>
             ))
           ) : (
-            <span className="text-sm text-white/80">{readingHint(signs, spelling)}</span>
+            <span className="text-sm text-white/80">
+              {signs.phraseSent && !signs.spelling.length ? "Frase enviada à LIA." : readingHint(signs, spelling)}
+            </span>
           )}
           {spelling && signs.status === "ready" && (
             <span className="max-w-full rounded-2xl border border-dashed border-ambar/70 px-3 py-1 font-bold tracking-widest text-ambar">
@@ -46,11 +48,6 @@ export function PhraseBar({ signs, busy }: { signs: Signs; busy: boolean }) {
             </span>
           )}
           {spelling && signs.spellState && <span className="text-sm text-white/80">{SPELL_HINT[signs.spellState]}</span>}
-          {!spelling && signs.guess && (
-            <span className="text-sm text-ambar">
-              vendo: {signs.guess.label} ({Math.round(signs.guess.confidence * 100)}%)
-            </span>
-          )}
           {signs.missed && (
             <span role="status" className="text-sm font-semibold text-red-300">
               Não entendi. Repita, por favor.
@@ -72,7 +69,7 @@ export function PhraseBar({ signs, busy }: { signs: Signs; busy: boolean }) {
             <button type="button" onClick={signs.removeLastWord} className={`${pillBtn} bg-white/15 hover:bg-white/25`}>
               Apagar última
             </button>
-            <button type="button" onClick={signs.sendPhrase} disabled={busy} className={`${pillBtn} bg-petroleo hover:bg-petroleo-escuro`}>
+            <button type="button" onClick={signs.sendPhrase} disabled={busy || signs.signPhase === "comparing"} className={`${pillBtn} bg-petroleo hover:bg-petroleo-escuro`}>
               Enviar frase
             </button>
           </div>

@@ -202,8 +202,10 @@ export type SampleSequence = (PreparedSequence & { segmented: boolean }) | { err
  */
 export function sampleToSequence(sample: Pick<Sample, 'frames' | 'width' | 'height'>, options: SampleSequenceOptions = {}): SampleSequence {
   const normalizer = new FrameNormalizer(options.normalization);
+  let sawHands = false;
   const frames = sample.frames.map((p) => {
     const raw = unpackRawFrame(p, sample.width, sample.height);
+    if (raw.hands.right || raw.hands.left) sawHands = true;
     return { t: raw.timestamp, features: normalizer.normalize(raw) };
   });
   const { segments } = segmentSequence(
@@ -216,7 +218,7 @@ export function sampleToSequence(sample: Pick<Sample, 'frames' | 'width' | 'heig
     const withHands = frames.map((f) => !!f.features && hasHands(f.features.vector));
     const first = withHands.indexOf(true);
     const last = withHands.lastIndexOf(true);
-    if (first < 0) return { error: 'nenhuma mão' };
+    if (first < 0) return { error: sawHands ? 'mãos detectadas sem referência dos ombros' : 'nenhuma mão' };
     span = frames.slice(first, last + 1);
   }
   const seq = sequenceFromFrames(span, options.sequence);

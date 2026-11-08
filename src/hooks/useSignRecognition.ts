@@ -13,7 +13,10 @@ import {
   type FrameEvent,
   type HoldState,
   type ImportReport,
+  type LetterModelInfo,
   type LiaVision,
+  type LiaVisionEvents,
+  type ModelInfo,
   type RecognitionMode,
 } from "@/lib/libras";
 import { baixarAmostras } from "@/services/libras.service";
@@ -25,12 +28,12 @@ import { baixarAmostras } from "@/services/libras.service";
  * 3. Quando o sinal termina, um classificador DTW (k vizinhos, num Web Worker) compara o movimento
  *    inteiro com os exemplos gravados; acima do limiar, vira palavra.
  * 4. No modo datilologia, cada letra conta quando a mão fica parada; "Confirmar palavra" junta as letras.
- * 5. Mãos abaixadas por 2,5 s fecham a frase, que vai para onPhrase (que manda para o back).
+ * 5. Mãos abaixadas por 1,5 s fecham a frase, que vai para onPhrase (que manda para o back).
  * Os exemplos vêm das gravações feitas aqui e dos gerados com o avatar do VLibras (página /treinar),
  * que o totem baixa do back ao carregar o reconhecimento.
  */
 
-const AUTO_SEND_MS = 2500; // mãos abaixadas por esse tempo = frase terminada
+const AUTO_SEND_MS = 1500; // mãos abaixadas por esse tempo = frase terminada
 const COUNTDOWN_S = 3;
 const CAPTURE_MS = 2500;
 const LETTER_CAPTURE_MS = 2000;
@@ -47,6 +50,7 @@ const ALPHABET = parseAlphabet(alphabetFile);
 const DEFAULT_SIGNS = glossesOf(parseVocabulary(vocabFile));
 
 export type SignRecognitionStatus = "off" | "loading" | "ready" | "error";
+type SignPhase = "idle" | "capturing" | "comparing";
 export type { RecognitionMode };
 
 export interface RecordingState {
@@ -89,7 +93,16 @@ export interface SignRecognitionOptions {
   enabled: boolean;
   /** Chamado com a frase quando a pessoa termina de sinalizar */
   onPhrase: (text: string) => void;
+  /** Mantém a frase montada enquanto a triagem não pode recebê-la. */
+  canSend?: boolean;
+  onDiagnostic?: (event: SignDiagnostic) => void;
 }
+
+type DiagnosticName = "frame" | "signProgress" | "signRecognized" | "lowConfidence" | "signDiscarded"
+  | "letterRecognized" | "letterLowConfidence" | "error";
+export type SignDiagnostic = {
+  [K in DiagnosticName]: { type: K; data: LiaVisionEvents[K] };
+}[DiagnosticName];
 
 let liaPromise: Promise<LiaVision> | null = null;
 
@@ -180,11 +193,15 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 /** Mesmo limiar que o motor usa para aceitar um sinal (confidenceThreshold padrão). */
 const LIVE_MIN_CONFIDENCE = 0.6;
 
-export function useSignRecognition({ videoRef, overlayRef, enabled, onPhrase, captureEngine }: SignRecognitionOptions) {
+export function useSignRecognition({ videoRef, overlayRef, enabled, onPhrase, canSend = true, onDiagnostic, captureEngine }: SignRecognitionOptions) {
   const [lia, setLia] = useState<LiaVision | null>(null);
   const [failed, setFailed] = useState(false);
   const [handsVisible, setHandsVisible] = useState(false);
+  const [hasShoulderReference, setHasShoulderReference] = useState(false);
   const [guess, setGuess] = useState<Prediction | null>(null);
+  const [signPhase, setSignPhase] = useState<SignPhase>("idle");
+  const [lastMatch, setLastMatch] = useState<string | null>(null);
+  const [phraseSent, setPhraseSent] = useState(false);
   const [words, setWords] = useState<string[]>([]);
   const [spelling, setSpelling] = useState<string[]>([]);
   const [spellState, setSpellState] = useState<HoldState | null>(null);
@@ -196,17 +213,23 @@ export function useSignRecognition({ videoRef, overlayRef, enabled, onPhrase, ca
   const [vlibrasEnabled, setVlibrasEnabledState] = useState(() => readJSON(USE_VLIBRAS_KEY, true));
   const vlibrasEnabledRef = useRef(vlibrasEnabled);
   const [signList, setSignList] = useState<string[]>(() => readJSON(SIGNS_KEY, DEFAULT_SIGNS));
-  const [hasTrainedSigns, setHasTrainedSigns] = useState(false);
+  const [models, setModels] = useState<{ signs: ModelInfo; letters: LetterModelInfo | null } | null>(null);
+  const [modelError, setModelError] = useState(false);
   const [hadOldData] = useState(() => readJSON<unknown>(OLD_DATA_KEY, null) !== null);
   const [signer] = useState(loadSigner);
 
   const onPhraseRef = useRef(onPhrase);
+  const canSendRef = useRef(canSend);
+  const pendingSigns = useRef(new Set<number>());
   const recordingRef = useRef(false);
   const recordingAbort = useRef<AbortController | null>(null);
   const missTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const matchTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const sentTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useEffect(() => {
     onPhraseRef.current = onPhrase;
+    canSendRef.current = canSend;
   });
   useEffect(() => writeJSON(SIGNS_KEY, signList), [signList]);
   useEffect(() => () => recordingAbort.current?.abort(), []);
@@ -224,9 +247,11 @@ export function useSignRecognition({ videoRef, overlayRef, enabled, onPhrase, ca
       return extra.length ? [...list, ...extra] : list;
     });
     if (captureEngine !== undefined) return; // A bancada grava quadros sem classificar sinais.
-    if (vlibrasEnabledRef.current) await l.loadModel();
-    else await l.loadModel({ samples: (await l.dataset.export()).samples.filter((x) => x.source !== "vlibras") });
-    setHasTrainedSigns((l.model?.templates ?? 0) > 0 || !!l.letterModel);
+    const signs = vlibrasEnabledRef.current
+      ? await l.loadModel()
+      : await l.loadModel({ samples: (await l.dataset.export()).samples.filter((x) => x.source !== "vlibras") });
+    setModels({ signs, letters: l.letterModel });
+    setModelError(false);
   }, [captureEngine]);
 
   /**
@@ -257,7 +282,10 @@ export function useSignRecognition({ videoRef, overlayRef, enabled, onPhrase, ca
       .then(async (l) => {
         if (cancelled) return;
         setLia(l);
-        await refreshModel(l).catch((err) => console.warn("[lia] não consegui ler as gravações salvas", err));
+        await refreshModel(l).catch((err) => {
+          setModelError(true);
+          console.warn("[lia] não consegui ler as gravações salvas", err);
+        });
         // Em segundo plano: o back pode demorar para acordar e o totem já funciona com o que tem.
         if (!captureEngine) {
           void syncFromServer(l).catch((err) => console.warn("[lia] não consegui baixar os exemplos do servidor", err));
@@ -270,11 +298,15 @@ export function useSignRecognition({ videoRef, overlayRef, enabled, onPhrase, ca
   }, [enabled, lia, captureEngine, refreshModel, syncFromServer]);
 
   const sendPhrase = useCallback(() => {
-    if (!lia) return;
+    if (!lia || !canSendRef.current || pendingSigns.current.size) return;
     if (lia.getSpelling().length) lia.commitSpelling(); // palavra soletrada em andamento entra na frase
     const text = lia.getGlosses().join(" ").trim();
     lia.clearGlosses();
-    if (text) onPhraseRef.current(text);
+    if (!text) return;
+    onPhraseRef.current(text);
+    setPhraseSent(true);
+    clearTimeout(sentTimer.current);
+    sentTimer.current = setTimeout(() => setPhraseSent(false), 1800);
   }, [lia]);
   const sendRef = useRef(sendPhrase);
   useEffect(() => {
@@ -286,6 +318,21 @@ export function useSignRecognition({ videoRef, overlayRef, enabled, onPhrase, ca
     if (!lia) return;
     let lastHandsAt = performance.now();
     let lastSpell: HoldState | null = null;
+    let lastPhase: SignPhase = "idle";
+    let lastReference = false;
+    const pending = pendingSigns.current;
+    const finishComparison = (timestamp: number) => {
+      pending.delete(timestamp);
+      if (!pending.size && lastPhase === "comparing") {
+        lastPhase = "idle";
+        setSignPhase("idle");
+      }
+    };
+    const showMatch = (label: string) => {
+      setLastMatch(label);
+      clearTimeout(matchTimer.current);
+      matchTimer.current = setTimeout(() => setLastMatch(null), 2200);
+    };
     const flashMiss = () => {
       setMissed(true);
       clearTimeout(missTimer.current);
@@ -294,26 +341,55 @@ export function useSignRecognition({ videoRef, overlayRef, enabled, onPhrase, ca
     const offs = [
       lia.on("frame", (e) => {
         drawHands(overlayRef.current, e);
+        if (!!e.features !== lastReference) {
+          lastReference = !!e.features;
+          setHasShoulderReference(lastReference);
+        }
         if (e.spelling?.state !== lastSpell) {
           lastSpell = e.spelling?.state ?? null;
           setSpellState(lastSpell);
         }
+        const capturing = e.segmentation?.state === "active";
+        const nextPhase = capturing ? "capturing" : pending.size ? "comparing" : "idle";
+        if (nextPhase !== lastPhase) {
+          lastPhase = nextPhase;
+          setSignPhase(nextPhase);
+        }
         const now = performance.now();
-        if (e.raw.hands.right || e.raw.hands.left) lastHandsAt = now;
-        else if (now - lastHandsAt > AUTO_SEND_MS && !recordingRef.current && (lia.getGlosses().length || lia.getSpelling().length)) {
+        const handInZone = e.features
+          ? e.segmentation?.inZone || !!e.spelling?.side
+          : !!(e.raw.hands.right || e.raw.hands.left);
+        if (handInZone || capturing) lastHandsAt = now;
+        else if (now - lastHandsAt >= AUTO_SEND_MS && !pending.size && canSendRef.current && !recordingRef.current
+          && (lia.getGlosses().length || lia.getSpelling().length)) {
           lastHandsAt = now;
           sendRef.current();
         }
       }),
       lia.on("handsDetected", (e) => setHandsVisible(e.count > 0)),
+      lia.on("signStart", () => {
+        setMissed(false);
+        setLastMatch(null);
+        clearTimeout(matchTimer.current);
+      }),
+      lia.on("signEnd", (e) => { pending.add(e.timestamp); }),
       // Palpite ao vivo: só mostra quando já passaria no limiar do reconhecimento final.
       lia.on("signProgress", (e) => setGuess(e.confidence >= LIVE_MIN_CONFIDENCE ? { label: e.gloss, confidence: e.confidence } : null)),
-      lia.on("signRecognized", () => setGuess(null)),
-      lia.on("signDiscarded", () => setGuess(null)),
-      lia.on("lowConfidence", (e) => {
+      lia.on("signRecognized", (e) => {
+        finishComparison(e.timestamp);
         setGuess(null);
-        if (e.reason === "confianca-baixa" || e.reason === "poucas-maos") flashMiss();
+        showMatch(e.gloss);
       }),
+      lia.on("signDiscarded", (e) => {
+        setGuess(null);
+        if (e.reason !== "retracao") flashMiss();
+      }),
+      lia.on("lowConfidence", (e) => {
+        finishComparison(e.timestamp);
+        setGuess(null);
+        if (e.reason !== "sem-modelo") flashMiss();
+      }),
+      lia.on("letterRecognized", (e) => showMatch(e.letter)),
       lia.on("letterLowConfidence", (e) => e.reason === "confianca-baixa" && flashMiss()),
       lia.on("glossesChanged", (e) => setWords(e.glosses)),
       lia.on("spellingChanged", (e) => setSpelling(e.letters)),
@@ -321,35 +397,64 @@ export function useSignRecognition({ videoRef, overlayRef, enabled, onPhrase, ca
     return () => {
       offs.forEach((off) => off());
       clearTimeout(missTimer.current);
+      clearTimeout(matchTimer.current);
+      clearTimeout(sentTimer.current);
+      pending.clear();
       lia.clearGlosses();
       lia.clearSpelling();
     };
   }, [lia, overlayRef]);
+
+  useEffect(() => {
+    if (!lia || !enabled || !onDiagnostic) return;
+    let lastFrameAt = 0;
+    const off = [
+      lia.on("frame", (data) => {
+        if (data.timestamp - lastFrameAt < 200) return;
+        lastFrameAt = data.timestamp;
+        onDiagnostic({ type: "frame", data });
+      }),
+      lia.on("signProgress", (data) => onDiagnostic({ type: "signProgress", data })),
+      lia.on("signRecognized", (data) => onDiagnostic({ type: "signRecognized", data })),
+      lia.on("lowConfidence", (data) => onDiagnostic({ type: "lowConfidence", data })),
+      lia.on("signDiscarded", (data) => onDiagnostic({ type: "signDiscarded", data })),
+      lia.on("letterRecognized", (data) => onDiagnostic({ type: "letterRecognized", data })),
+      lia.on("letterLowConfidence", (data) => onDiagnostic({ type: "letterLowConfidence", data })),
+      lia.on("error", (data) => onDiagnostic({ type: "error", data })),
+    ];
+    return () => off.forEach((stop) => stop());
+  }, [lia, enabled, onDiagnostic]);
+
+  useEffect(() => {
+    if (lia?.mode !== mode) pendingSigns.current.clear();
+    lia?.setMode(mode);
+  }, [lia, mode]);
 
   // 3. Processa o vídeo enquanto a câmera estiver ligada (usa o stream que o useCamera já abriu).
   useEffect(() => {
     const video = videoRef.current;
     if (!lia || !enabled || !video) return;
     let stopped = false;
-    lia.start(video).catch(() => !stopped && setFailed(true));
+    const pending = pendingSigns.current;
+    lia.start(video)
+      .then(() => { if (!stopped) setFailed(false); })
+      .catch(() => !stopped && setFailed(true));
     const canvas = overlayRef.current;
     return () => {
       stopped = true;
       lia.stop();
+      pending.clear();
+      setLastMatch(null);
       canvas?.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
     };
   }, [lia, enabled, videoRef, overlayRef]);
 
   /* ---------- sinais / datilologia ---------- */
 
-  const setMode = useCallback(
-    (m: RecognitionMode) => {
-      lia?.setMode(m);
-      setModeState(m);
-      setGuess(null);
-    },
-    [lia],
-  );
+  const setMode = useCallback((m: RecognitionMode) => {
+    setModeState(m);
+    setGuess(null);
+  }, []);
 
   /* ---------- treino ---------- */
 
@@ -379,6 +484,7 @@ export function useSignRecognition({ videoRef, overlayRef, enabled, onPhrase, ca
         }
         const ms = letter ? LETTER_CAPTURE_MS : CAPTURE_MS;
         setRecording({ label: gloss, phase: "capturing", secondsLeft: Math.ceil(ms / 1000) });
+        pendingSigns.current.clear();
         lia.setRecognizing(false); // não reconhece o que está sendo gravado
         const sample = await lia.dataset.recordSample(gloss, {
           signer, durationMs: ms, origin: "totem", signal: controller.signal,
@@ -473,12 +579,19 @@ export function useSignRecognition({ videoRef, overlayRef, enabled, onPhrase, ca
   return {
     status,
     handsVisible: enabled && handsVisible,
+    hasShoulderReference: enabled && hasShoulderReference,
     /** Palpite ao vivo enquanto o sinal acontece. */
     guess: enabled ? guess : null,
+    signPhase: enabled ? signPhase : "idle",
+    lastMatch: enabled ? lastMatch : null,
+    phraseSent: enabled && phraseSent,
     /** Último sinal/letra não entendido (some sozinho em 2 s). */
     missed: enabled && missed,
     words,
-    hasTrainedSigns,
+    hasTrainedSigns: !!(models?.signs.templates || models?.letters?.templates),
+    models,
+    modelError,
+    threshold: mode === "datilologia" ? lia?.letterThreshold : lia?.confidenceThreshold,
     removeLastWord: () => lia?.undoLast(),
     clearWords: () => lia?.clearGlosses(),
     sendPhrase,

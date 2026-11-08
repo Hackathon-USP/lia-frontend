@@ -10,6 +10,7 @@ export const ROUTES = {
   recepcao: "/recepcao",
   /** Gera exemplos de sinais com o avatar do VLibras para o reconhecimento de Libras (uso da equipe) */
   treinar: "/treinar",
+  testarLibras: "/treinar/teste",
 } as const;
 
 export type AppRoute = (typeof ROUTES)[keyof typeof ROUTES];

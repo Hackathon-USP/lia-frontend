@@ -19,16 +19,18 @@ export function CameraPip({
   overlayRef,
   status,
   handsVisible,
+  recognitionLabel,
 }: {
   videoRef: RefObject<HTMLVideoElement | null>;
   overlayRef: RefObject<HTMLCanvasElement | null>;
   status: CameraStatus;
   handsVisible: boolean;
+  recognitionLabel?: string;
 }) {
   const active = status === "active";
   const problem = !active && status !== "idle" && status !== "requesting";
   // Mesmo enquadramento no vídeo e no desenho das mãos (canvas também aceita object-fit).
-  const media = "aspect-video w-full -scale-x-100 object-cover";
+  const media = "size-full -scale-x-100 object-cover";
 
   return (
     <figure
@@ -37,11 +39,13 @@ export function CameraPip({
       }`}
     >
       {/* O <video> fica sempre montado para o ref existir quando o stream chegar. */}
-      <video ref={videoRef} autoPlay muted playsInline aria-label="Sua câmera" className={`${media} ${active ? "" : "invisible absolute"}`} />
-      <canvas ref={overlayRef} aria-hidden="true" className={`pointer-events-none absolute inset-0 h-full ${media} ${active ? "" : "invisible"}`} />
+      <div className={active ? "relative aspect-video" : "invisible absolute inset-0"}>
+        <video ref={videoRef} autoPlay muted playsInline aria-label="Sua câmera" className={media} />
+        <canvas ref={overlayRef} aria-hidden="true" className={`pointer-events-none absolute inset-0 ${media}`} />
+      </div>
       {active ? (
-        <figcaption className="absolute inset-x-0 bottom-0 bg-black/65 px-2 py-1 text-xs font-semibold text-white">
-          Você{handsVisible ? " · mãos visíveis" : ""}
+        <figcaption className="grid min-h-10 place-items-center px-2 py-1 text-center text-xs font-semibold text-white">
+          <span role="status" className="line-clamp-2 wrap-anywhere">{recognitionLabel ?? "Você"}</span>
         </figcaption>
       ) : (
         <figcaption className="grid min-h-16 place-items-center px-2 py-1.5 text-center text-xs sm:min-h-20">

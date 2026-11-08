@@ -180,6 +180,7 @@ export class Recognizer {
   private classifier: DtwClassifier | null = null;
   private glosses: string[] = [];
   private segmentId = 0;
+  private resetVersion = 0;
   private lastLiveAt = 0;
   private liveBusy = false;
   threshold: number;
@@ -245,6 +246,7 @@ export class Recognizer {
   reset() {
     this.segmenter.reset();
     this.segmentId++;
+    this.resetVersion++;
   }
 
   /** Processa um quadro. `t` = tempo do quadro (ms, crescente); `timestamp` = hora para os eventos. */
@@ -294,6 +296,7 @@ export class Recognizer {
   }
 
   private async onSegment(segment: Segment<Item>, timestamp: number) {
+    const version = this.resetVersion;
     const { durationMs, handsRatio } = segment;
     this.emit('signEnd', { timestamp, durationMs, handsRatio, reason: segment.reason });
     const low = (reason: LowConfidenceReason, top3: Top3Item[] = []) =>
@@ -308,9 +311,11 @@ export class Recognizer {
     try {
       result = await this.getClassifier().classify(seq.data);
     } catch (err) {
+      if (version !== this.resetVersion) return;
       console.error('[lia-vision] erro ao classificar', err);
       return low('erro');
     }
+    if (version !== this.resetVersion) return;
     const top3 = top3Of(result);
     const best = result.ranking[0];
     if (!best || best.confidence < this.threshold) return low('confianca-baixa', top3);

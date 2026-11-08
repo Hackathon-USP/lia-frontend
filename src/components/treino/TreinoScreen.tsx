@@ -214,10 +214,15 @@ export function TreinoScreen() {
             <p className="mb-3 text-sm text-tinta-suave">
               Grave seus próprios sinais e letras. Os exemplos ficam salvos neste navegador.
             </p>
-            <button type="button" onClick={() => setTrainerOpen(true)} disabled={running || t.uploading || t.evaluating}
-              className={`${btn} ${btnPrimario}`}>
-              Ensinar sinais
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => setTrainerOpen(true)} disabled={running || t.uploading || t.evaluating}
+                className={`${btn} ${btnPrimario}`}>
+                Ensinar sinais
+              </button>
+              {!(running || t.uploading || t.evaluating) && (
+                <Link href={ROUTES.testarLibras} className={`${btn} ${btnSecundario}`}>Testar reconhecimento</Link>
+              )}
+            </div>
           </Panel>
           <Panel title="Avatar do VLibras">
             <AvatarStage iframeRef={iframeRef} overlay={overlay} />

@@ -385,6 +385,7 @@ type Emit = <K extends keyof FingerspellingEvents>(type: K, event: Fingerspellin
 const round3 = (x: number) => Math.round(x * 1000) / 1000;
 
 export class Speller {
+  private resetVersion = 0;
   private readonly opts: SpellerOptions;
   private detector: HoldDetector;
   private classifier: DtwClassifier | null = null;
@@ -442,6 +443,7 @@ export class Speller {
 
   reset() {
     this.detector.reset();
+    this.resetVersion++;
   }
 
   push(t: number, features: FrameFeatures | null, timestamp: number): SpellingStatus {
@@ -451,6 +453,7 @@ export class Speller {
   }
 
   private async onCandidate(c: LetterCandidate, timestamp: number) {
+    const version = this.resetVersion;
     if (!this.model || this.model.templates === 0) {
       this.emit('letterLowConfidence', { top3: [], timestamp, reason: 'sem-modelo' });
       return;
@@ -459,10 +462,12 @@ export class Speller {
     try {
       r = await this.getClassifier().classify(c.descriptor);
     } catch (err) {
+      if (version !== this.resetVersion) return;
       console.error('[lia-vision] erro ao classificar a letra', err);
       this.emit('letterLowConfidence', { top3: [], timestamp, reason: 'erro' });
       return;
     }
+    if (version !== this.resetVersion) return;
     const top3 = r.ranking.slice(0, 3).map((s) => ({ gloss: s.gloss, confidence: round3(s.confidence) }));
     const best = r.ranking[0];
     if (!best || best.confidence < this.threshold) {

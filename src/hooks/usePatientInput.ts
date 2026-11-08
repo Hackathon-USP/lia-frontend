@@ -101,6 +101,7 @@ export function usePatientInput({ active, training, busy, dictating = false, cam
     videoRef: camera.videoRef,
     overlayRef: camera.overlayRef,
     enabled: active && camera.on, // a leitura continua durante o treino (é ela que grava os exemplos)
+    canSend: active && !training && !busy,
     onPhrase: (text) => enviar(text, "libras"),
   });
 
