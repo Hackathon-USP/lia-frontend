@@ -17,7 +17,7 @@ function readingHint(signs: Signs, spelling: boolean) {
   if (signs.status === "off") return "Ligue a câmera para conversar em Libras.";
   if (!signs.hasTrainedSigns) return "Use as opções na tela para responder.";
   if (spelling) return "Soletre letra por letra: cada letra conta quando a mão fica parada.";
-  return "Sinalize de frente para a câmera. Abaixe as mãos para enviar a frase.";
+  return "Sinais que correspondem à pergunta são enviados na hora. Para uma frase, abaixe as mãos ao terminar.";
 }
 
 /** A frase sendo montada em Libras (sinais ou letras soletradas), com apagar e enviar. */

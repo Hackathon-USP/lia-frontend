@@ -1,3 +1,5 @@
+import type { PatientInput } from "@/hooks/usePatientInput";
+
 export interface LiaStatusInput {
   /** Player do avatar carregado */
   ready: boolean;
@@ -19,14 +21,12 @@ export function liaStatusLabel({ ready, preparing, playing, listening, interpret
   if (listening) return interprete ? "traduzindo sua fala" : "ouvindo você";
   return "ao vivo";
 }
-import type { PatientInput } from "@/hooks/usePatientInput";
-
-
 export function signRecognitionLabel(signs: PatientInput["signs"], busy: boolean): string {
   if (signs.status === "error" || signs.modelError) return "Leitura indisponível";
   if (signs.status === "loading" || !signs.models) return "Carregando leitura…";
   if (signs.signPhase === "capturing") return signs.guess ? `Possível: ${signs.guess.label}` : "Lendo sinal…";
   if (signs.signPhase === "comparing") return "Comparando sinal…";
+  if (signs.phraseSent) return "Resposta enviada";
   if (signs.lastMatch) return `Reconhecido: ${signs.lastMatch}`;
   if (busy && (signs.words.length || signs.spelling.length)) return "Frase pronta. Aguarde…";
   if (signs.missed) return "Não reconhecido. Repita.";

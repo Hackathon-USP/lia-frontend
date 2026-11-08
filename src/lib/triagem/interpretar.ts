@@ -16,25 +16,30 @@ export function normalizarSinal(s: string) {
 
 /* ---------- Libras (glosas) ---------- */
 
-/**
- * Escolhe, entre as glosas reconhecidas na frase, a que responde à pergunta.
- * Ex.: frase "DOR CABEÇA" na pergunta "Onde é a dor?" → "CABEÇA".
- * Se nada casar, devolve a frase inteira e o back decide (ou pede para repetir).
- */
-export function escolherValor(pergunta: Pergunta, frase: string): string | number {
-  const glosas = frase.split(/\s+/).filter(Boolean);
+const chaveDoSinal = (sinal: string) => normalizarSinal(sinal).replace(/_/g, "");
+
+/** Traduz um sinal confirmado em uma resposta inequívoca da pergunta atual. */
+export function respostaDoSinal(pergunta: Pergunta, sinal: string): string | number | null {
+  const chave = chaveDoSinal(sinal);
+  if (!chave) return null;
   if (pergunta.tipo === "escala") {
-    const numero = glosas.find((g) => /^\d+$/.test(g));
-    return numero !== undefined ? Number(numero) : (glosas[0] ?? frase);
+    const numero = /^\d+$/.test(chave) ? Number(chave) : NUMEROS[chave];
+    return numero !== undefined && numero >= (pergunta.minimo ?? 0) && numero <= (pergunta.maximo ?? 10)
+      ? numero
+      : null;
   }
-  for (const g of glosas) {
-    const n = normalizarSinal(g);
-    const casa = pergunta.opcoes.some(
-      (o) => normalizarSinal(o.id) === n || normalizarSinal(o.rotulo) === n || o.sinais.some((s) => normalizarSinal(s) === n),
-    );
-    if (casa) return g;
+  const opcoes = pergunta.opcoes.filter((o) => [o.id, o.rotulo, ...o.sinais].some((s) => chaveDoSinal(s) === chave));
+  return opcoes.length === 1 ? opcoes[0].id : null;
+}
+
+function entenderLibras(pergunta: Pergunta, frase: string): string | number | null {
+  const exata = respostaDoSinal(pergunta, frase);
+  if (exata !== null) return exata;
+  for (const glosa of frase.split(/\s+/)) {
+    const valor = respostaDoSinal(pergunta, glosa);
+    if (valor !== null) return valor;
   }
-  return frase;
+  return null;
 }
 
 /** A frase (sinalizada, falada ou digitada) é um "sim" ou um "não"? (para o consentimento) */
@@ -139,7 +144,8 @@ export function entenderFala(pergunta: Pergunta, frase: string): string | number
  * Libras chega como glosas (DOR CABEÇA); voz e texto digitado chegam em português livre.
  */
 export function interpretarEntrada(pergunta: Pergunta, frase: string, canal: ModoAcessibilidade): string | number | null {
-  const valor = canal === "libras" ? escolherValor(pergunta, frase) : entenderFala(pergunta, frase);
+  if (canal === "libras") return entenderLibras(pergunta, frase);
+  const valor = entenderFala(pergunta, frase);
   if (pergunta.tipo === "escala") return typeof valor === "number" ? valor : null;
   return valor === frase ? null : valor;
 }

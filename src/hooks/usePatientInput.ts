@@ -41,9 +41,10 @@ export interface PatientInputOptions {
   lia: LiaPresenter;
   /** Uma resposta do paciente para a triagem */
   onCommand: (text: string, canal: ModoAcessibilidade) => void;
+  shouldSendSign?: (gloss: string) => boolean;
 }
 
-export function usePatientInput({ active, training, busy, dictating = false, camera, lia, onCommand }: PatientInputOptions) {
+export function usePatientInput({ active, training, busy, dictating = false, camera, lia, onCommand, shouldSendSign }: PatientInputOptions) {
   /** Última coisa que o paciente disse, sinalizou, digitou ou tocou */
   const [userCaption, setUserCaption] = useState("");
   /** Modo intérprete: o que a LIA ouve no microfone ela passa para Libras (sem responder a triagem). */
@@ -102,6 +103,7 @@ export function usePatientInput({ active, training, busy, dictating = false, cam
     overlayRef: camera.overlayRef,
     enabled: active && camera.on, // a leitura continua durante o treino (é ela que grava os exemplos)
     canSend: active && !training && !busy,
+    shouldSendSign,
     onPhrase: (text) => enviar(text, "libras"),
   });
 

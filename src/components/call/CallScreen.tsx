@@ -44,6 +44,7 @@ export function CallScreen({ modo = "libras", active = true, onEnd }: Props) {
     camera: { videoRef, overlayRef, on: cameraOn },
     lia,
     onCommand: (text, canal) => void triagem.entrada(text, canal),
+    shouldSendSign: triagem.podeEnviarSinal,
   });
 
   // Troca de paciente: o player continua carregado, mas tudo da sessão anterior é descartado.

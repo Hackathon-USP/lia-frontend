@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { clearSavedSession, readSavedSession, RESTART_AFTER_END_MS, saveSession } from "@/config/totem";
 import { cpfDigitos, cpfValido, formatarCpf } from "@/lib/triagem/cpf";
 import { interpretarIdentificacao } from "@/lib/triagem/identificacao";
-import { interpretarEntrada, simOuNao } from "@/lib/triagem/interpretar";
+import { interpretarEntrada, normalizarSinal, respostaDoSinal, simOuNao } from "@/lib/triagem/interpretar";
 import {
   acordarBack,
   buscarConferencia,
@@ -461,6 +461,17 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
     [aplicar, chamar],
   );
 
+  /** Só envia imediatamente um sinal que vale como resposta da etapa atual. */
+  const podeEnviarSinal = useCallback((sinal: string) => {
+    if (ocupado.current) return false;
+    if (faseRef.current === "consentimento") {
+      const glosa = normalizarSinal(sinal);
+      return glosa === "SIM" || glosa === "NAO";
+    }
+    const pergunta = perguntaRef.current;
+    return faseRef.current === "pergunta" && pergunta !== null && respostaDoSinal(pergunta, sinal) !== null;
+  }, []);
+
   /**
    * Entrada livre: frase sinalizada em Libras, falada no microfone ou digitada.
    * Primeiro as regras locais (rápidas, nada sai do totem); o que elas não entendem vai para a IA,
@@ -592,6 +603,7 @@ export function useTriagem({ falar, modo = "libras", onReset }: UseTriagemOption
     consentir,
     responderPergunta,
     entrada,
+    podeEnviarSinal,
     tentarDeNovo,
     recomecar,
   };

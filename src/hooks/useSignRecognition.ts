@@ -95,6 +95,8 @@ export interface SignRecognitionOptions {
   onPhrase: (text: string) => void;
   /** Mantém a frase montada enquanto a triagem não pode recebê-la. */
   canSend?: boolean;
+  /** Decide se um sinal confirmado e sozinho já responde à pergunta. */
+  shouldSendSign?: (gloss: string) => boolean;
   onDiagnostic?: (event: SignDiagnostic) => void;
 }
 
@@ -193,7 +195,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 /** Mesmo limiar que o motor usa para aceitar um sinal (confidenceThreshold padrão). */
 const LIVE_MIN_CONFIDENCE = 0.6;
 
-export function useSignRecognition({ videoRef, overlayRef, enabled, onPhrase, canSend = true, onDiagnostic, captureEngine }: SignRecognitionOptions) {
+export function useSignRecognition({ videoRef, overlayRef, enabled, onPhrase, canSend = true, shouldSendSign, onDiagnostic, captureEngine }: SignRecognitionOptions) {
   const [lia, setLia] = useState<LiaVision | null>(null);
   const [failed, setFailed] = useState(false);
   const [handsVisible, setHandsVisible] = useState(false);
@@ -379,6 +381,10 @@ export function useSignRecognition({ videoRef, overlayRef, enabled, onPhrase, ca
         finishComparison(e.timestamp);
         setGuess(null);
         showMatch(e.gloss);
+        if (shouldSendSign && canSendRef.current && !pending.size && !recordingRef.current
+          && lia.getGlosses().length === 1 && !lia.getSpelling().length && shouldSendSign(e.gloss)) {
+          sendRef.current();
+        }
       }),
       lia.on("signDiscarded", (e) => {
         setGuess(null);
@@ -403,7 +409,7 @@ export function useSignRecognition({ videoRef, overlayRef, enabled, onPhrase, ca
       lia.clearGlosses();
       lia.clearSpelling();
     };
-  }, [lia, overlayRef]);
+  }, [lia, overlayRef, shouldSendSign]);
 
   useEffect(() => {
     if (!lia || !enabled || !onDiagnostic) return;
