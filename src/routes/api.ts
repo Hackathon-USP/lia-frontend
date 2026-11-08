@@ -17,10 +17,25 @@ export const API_ROUTES = {
     consultar: (id: number) => `/atendimentos/${id}`,
     /** POST {pergunta_id, valor, canal?, confianca?} — grava e devolve a próxima pergunta */
     responder: (id: number) => `/atendimentos/${id}/respostas`,
-    /** POST — emite a senha e devolve a mensagem final */
+    /** PUT {nome, cpf} — obrigatório antes de finalizar (422 = nome/CPF inválido) */
+    identificar: (id: number) => `/atendimentos/${id}/identificacao`,
+    /** POST — emite a senha e devolve a mensagem final (409 = falta identificar) */
     finalizar: (id: number) => `/atendimentos/${id}/finalizar`,
   },
   senhas: {
     consultar: (codigo: string) => `/senhas/${codigo}`,
+  },
+  /** Tela do guichê. Sem autenticação ainda: não divulgar a URL da tela. */
+  recepcao: {
+    /** GET ?status=&data= — senhas do dia, já na ordem de chamada */
+    fila: "/recepcao/fila",
+    /** POST — chama a próxima (404 = fila vazia) */
+    chamar: "/recepcao/chamar",
+    /** GET ?cpf=&modo=&status=&data= — busca e histórico */
+    atendimentos: "/recepcao/atendimentos",
+    /** GET — detalhe do paciente */
+    atendimento: (id: number) => `/recepcao/atendimentos/${id}`,
+    /** PATCH {status} — concluir ou chamar uma senha específica */
+    senha: (codigo: string) => `/recepcao/senhas/${encodeURIComponent(codigo)}`,
   },
 } as const;

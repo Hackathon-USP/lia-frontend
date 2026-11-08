@@ -134,9 +134,12 @@ export function entenderFala(pergunta: Pergunta, frase: string): string | number
 /* ---------- ponto de entrada ---------- */
 
 /**
- * Valor a enviar ao back para uma frase livre do paciente.
+ * Valor a enviar ao back para uma frase livre do paciente, ou null se as regras não entenderam
+ * (aí a LIA tenta com a IA, ou manda a frase como está para o back decidir).
  * Libras chega como glosas (DOR CABEÇA); voz e texto digitado chegam em português livre.
  */
-export function interpretarEntrada(pergunta: Pergunta, frase: string, canal: ModoAcessibilidade): string | number {
-  return canal === "libras" ? escolherValor(pergunta, frase) : entenderFala(pergunta, frase);
+export function interpretarEntrada(pergunta: Pergunta, frase: string, canal: ModoAcessibilidade): string | number | null {
+  const valor = canal === "libras" ? escolherValor(pergunta, frase) : entenderFala(pergunta, frase);
+  if (pergunta.tipo === "escala") return typeof valor === "number" ? valor : null;
+  return valor === frase ? null : valor;
 }

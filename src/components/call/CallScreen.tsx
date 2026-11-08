@@ -13,6 +13,7 @@ import { liaStatusLabel } from "./liaStatus";
 import { PhraseBar } from "./PhraseBar";
 import { SignTrainer } from "./SignTrainer";
 import { TriagemPanel } from "./TriagemPanel";
+import { TurnoIndicador, turnoAtual } from "./TurnoIndicador";
 
 interface Props {
   modo?: ModoAcessibilidade;
@@ -39,6 +40,7 @@ export function CallScreen({ modo = "libras", active = true, onEnd }: Props) {
     active,
     training: trainerOpen,
     busy: triagem.carregando,
+    dictating: triagem.fase === "identificacao",
     camera: { videoRef, overlayRef, on: cameraOn },
     lia,
     onCommand: (text, canal) => void triagem.entrada(text, canal),
@@ -55,6 +57,12 @@ export function CallScreen({ modo = "libras", active = true, onEnd }: Props) {
     if (active) void triagem.comecar();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- sessão muda apenas ao entrar/sair do atendimento
   }, [active]);
+
+  // Nome se soletra: na identificação a leitura das mãos já começa em datilologia.
+  const { setMode: setSignMode } = input.signs;
+  useEffect(() => {
+    if (triagem.fase === "identificacao") setSignMode("datilologia");
+  }, [triagem.fase, setSignMode]);
 
   useEffect(() => {
     if (active && modo === "libras") void startCamera();
@@ -74,7 +82,7 @@ export function CallScreen({ modo = "libras", active = true, onEnd }: Props) {
       <div className={`totem-content grid flex-1 ${layout}`}>
         <AvatarStage
           lia={lia}
-          status={liaStatusLabel({ ...lia.player, listening: ouvido.listening, interprete: input.interprete })}
+          status={liaStatusLabel({ ...lia.player, listening: ouvido.listening, interprete: input.interprete && triagem.fase !== "identificacao" })}
           pipSide={pipSide}
           hidden={completed && !libras}
           hideCaption={triagem.carregando}
@@ -94,11 +102,34 @@ export function CallScreen({ modo = "libras", active = true, onEnd }: Props) {
             listenError={ouvido.error}
             voiceBlocked={lia.voice.enabled && lia.voice.blocked}
           />
-          {!completed && <UserEcho interim={ouvido.interim} userCaption={input.userCaption} />}
+          {!completed && (
+            <div className="mx-auto w-full max-w-3xl space-y-2 px-4 sm:px-8">
+              <TurnoIndicador
+                turno={turnoAtual({
+                  liaFalando: lia.talking,
+                  pensando: triagem.carregando || triagem.pensando,
+                  interim: ouvido.interim,
+                  ouvindo: ouvido.listening,
+                  esperandoResposta: ["consentimento", "pergunta", "identificacao"].includes(triagem.fase),
+                })}
+                interim={ouvido.interim}
+                libras={libras}
+                podeInterromper={ouvido.listening}
+              />
+              <UserEcho userCaption={input.userCaption} />
+            </div>
+          )}
           <TriagemPanel
             key={triagem.fase}
             libras={libras}
             consentimento={triagem.consentimento}
+            identificacao={{
+              instrucao: triagem.textoIdentificacao,
+              rascunho: triagem.rascunho,
+              onMudar: triagem.mudarRascunho,
+              erro: triagem.erroIdentificacao,
+              onEnviar: (nome, cpf) => void triagem.identificar(nome, cpf),
+            }}
             fase={triagem.fase}
             pergunta={triagem.pergunta}
             finalizacao={triagem.finalizacao}

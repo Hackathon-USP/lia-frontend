@@ -1,3 +1,4 @@
+import dynamic from "next/dynamic";
 import Head from "next/head";
 import Link from "next/link";
 import type { ReactElement, ReactNode } from "react";
@@ -148,6 +149,42 @@ const LINHA_DO_TEMPO = [
   { titulo: "Outros serviços públicos", texto: "Cartórios, INSS e bancos." },
 ];
 
+/*
+ * Founders. PROVISÓRIO: troque nome, papel, frase e foto.
+ * Fotos: coloque o arquivo em public/assets/equipe/ (quadrado, ex.: 600x600) e aponte `foto` para ele.
+ */
+const FOTO_EQUIPE = "/assets/equipe/foto-equipe.svg"; // troque por uma foto 16:9 da equipe
+/**
+ * Recorte quadrado da foto: `enquadramento` é onde fica o rosto (object-position)
+ * e `zoom` aproxima a partir dali (1 = sem zoom; fotos de corpo inteiro precisam de mais).
+ */
+const FOUNDERS = [
+  {
+    nome: "Vini",
+    papel: "Cofundador",
+    frase: "A possibilidade de as pessoas receberem acesso à saúde de forma simples.",
+    foto: "/assets/equipe/vini.jpeg",
+    enquadramento: "50% 40%",
+    zoom: 1,
+  },
+  {
+    nome: "Pedro Gomes",
+    papel: "Cofundador",
+    frase: "O quão barato é produzir a LIA: acessibilidade que cabe em qualquer unidade.",
+    foto: "/assets/equipe/pedro.jpg",
+    enquadramento: "50% 22%",
+    zoom: 1.8,
+  },
+  {
+    nome: "Matheus",
+    papel: "Cofundador",
+    frase: "Queremos escalar a LIA para diversos mercados.",
+    foto: "/assets/equipe/foto-pessoa.svg", // provisória: troque quando a foto chegar
+    enquadramento: "50% 50%",
+    zoom: 1,
+  },
+];
+
 /* ---------- Peças de layout ---------- */
 
 function Container({ children, className = "" }: { children: ReactNode; className?: string }) {
@@ -172,10 +209,10 @@ function IconBadge({ children }: { children: ReactNode }) {
   );
 }
 
-/** Ilustração provisória do totem. Será trocada pela imagem/vídeo real da avatar. */
-function TotemPlaceholder() {
+/** Ilustração do totem: aparece enquanto o avatar da LIA carrega. */
+function TotemIlustracao() {
   return (
-    <figure className="relative mx-auto w-full max-w-md">
+    <div className="mx-auto w-full max-w-md">
       <div className="flex aspect-[4/5] items-center justify-center rounded-[2rem] border-2 border-dashed border-petroleo/40 bg-menta p-8">
         <svg
           viewBox="0 0 200 260"
@@ -200,8 +237,23 @@ function TotemPlaceholder() {
           <circle cx="100" cy="163" r="5" />
         </svg>
       </div>
+    </div>
+  );
+}
+
+// A LIA ao vivo (avatar do VLibras): só no navegador, é um player WebGL num iframe.
+const LiaVitrine = dynamic(() => import("@/components/home/LiaVitrine").then((m) => m.LiaVitrine), {
+  ssr: false,
+  loading: () => <TotemIlustracao />,
+});
+
+/** No lugar do vídeo: a própria LIA, se apresentando em Libras e sinalizando o que a pessoa escrever. */
+function LiaAoVivo() {
+  return (
+    <figure className="relative mx-auto w-full max-w-lg">
+      <LiaVitrine />
       <figcaption className="mt-3 text-center text-tinta-suave">
-        Espaço reservado para o vídeo da avatar da LIA no totem da recepção.
+        Esta é a LIA de verdade, ao vivo. Escreva uma frase e veja em Libras.
       </figcaption>
     </figure>
   );
@@ -249,7 +301,7 @@ const SobrePage: NextPageWithLayout = () => {
               </a>
             </div>
           </div>
-          <TotemPlaceholder />
+          <LiaAoVivo />
         </Container>
       </section>
 
@@ -518,6 +570,47 @@ const SobrePage: NextPageWithLayout = () => {
               </li>
             ))}
           </ol>
+        </Container>
+      </section>
+
+      {/* Quem faz a LIA */}
+      <section id="equipe" aria-labelledby="equipe-titulo" className="bg-white py-20 lg:py-28">
+        <Container>
+          <SectionHeading
+            id="equipe-titulo"
+            eyebrow="Quem faz a LIA"
+            title="As pessoas por trás da LIA."
+            intro="Um time que juntou tecnologia, saúde e acessibilidade para que ninguém precise de intérprete para ser atendido."
+          />
+
+          <figure className="mt-12 overflow-hidden rounded-4xl bg-menta">
+            {/* eslint-disable-next-line @next/next/no-img-element -- foto local; trocar o arquivo não exige mudar o código */}
+            <img src={FOTO_EQUIPE} alt="Os founders da LIA" width={1600} height={900} className="aspect-video w-full object-cover" />
+          </figure>
+
+          <ul className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {FOUNDERS.map((f, i) => (
+              <li key={i} className="flex gap-5 rounded-3xl border border-tinta/10 bg-creme p-6">
+                <span className="size-24 shrink-0 overflow-hidden rounded-2xl bg-menta">
+                  {/* eslint-disable-next-line @next/next/no-img-element -- foto local; trocar o arquivo não exige mudar o código */}
+                  <img
+                    src={f.foto}
+                    alt={`Foto de ${f.nome}`}
+                    width={96}
+                    height={96}
+                    style={{ objectPosition: f.enquadramento, transform: `scale(${f.zoom})`, transformOrigin: f.enquadramento }}
+                    className="size-full object-cover"
+                  />
+                </span>
+                <div>
+                  <p className="text-xl font-bold text-tinta">{f.nome}</p>
+                  <p className="font-semibold text-petroleo">{f.papel}</p>
+                  <p className="mt-3 text-sm font-semibold tracking-wide text-tinta-suave uppercase">O que me move na LIA</p>
+                  <p className="mt-1 leading-relaxed text-tinta">“{f.frase}”</p>
+                </div>
+              </li>
+            ))}
+          </ul>
         </Container>
       </section>
 

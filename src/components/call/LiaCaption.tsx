@@ -11,13 +11,15 @@ interface Props {
   playing: boolean;
   /** Palavra que a voz está falando agora (tem prioridade sobre os sinais) */
   voiceWord: number | null;
+  /** "grande" no totem; "media" em vitrines menores */
+  tamanho?: "grande" | "media";
 }
 
 /**
  * Legenda da LIA com destaque na palavra que está sendo falada ou sinalizada agora.
  * O que já passou fica normal; o que ainda vem, um pouco mais apagado.
  */
-export function LiaCaption({ label, text, gloss, glossIndex, playing, voiceWord }: Props) {
+export function LiaCaption({ label, text, gloss, glossIndex, playing, voiceWord, tamanho = "grande" }: Props) {
   const words = useMemo(() => text.split(/\s+/).filter(Boolean), [text]);
   const ranges = useMemo(() => (gloss ? alignGlossToWords(words, gloss.split(/\s+/)) : []), [words, gloss]);
 
@@ -31,7 +33,11 @@ export function LiaCaption({ label, text, gloss, glossIndex, playing, voiceWord 
   }
 
   return (
-    <p className="max-w-3xl rounded-2xl bg-tinta/90 px-5 py-3 text-center text-lg leading-relaxed text-white shadow-lg sm:text-2xl">
+    <p
+      className={`max-w-3xl rounded-2xl bg-tinta/90 px-5 py-3 text-center leading-relaxed text-white shadow-lg ${
+        tamanho === "grande" ? "text-lg sm:text-2xl" : "text-base sm:text-lg"
+      }`}
+    >
       <span className="font-bold text-ambar">{label}: </span>
       {words.map((w, i) => {
         const isCurrent = current !== null && i >= current.start && i <= current.end;

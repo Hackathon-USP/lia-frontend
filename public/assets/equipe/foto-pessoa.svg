@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" role="img" aria-label="Foto provisória">
+  <!-- Foto provisória de founder: troque por um .jpg com o mesmo enquadramento quadrado. -->
+  <rect width="400" height="400" fill="#e1efeb"/>
+  <circle cx="200" cy="158" r="74" fill="#0b6e5f" opacity="0.28"/>
+  <path d="M60 400c0-86 63-146 140-146s140 60 140 146z" fill="#0b6e5f" opacity="0.28"/>
+</svg>

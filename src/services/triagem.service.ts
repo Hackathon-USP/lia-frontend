@@ -1,5 +1,5 @@
 import { API_ROUTES } from "@/routes";
-import type { Atendimento, Finalizacao, ModoAcessibilidade, Pergunta, Resposta, TextosTotem } from "@/types";
+import type { Atendimento, Finalizacao, Identificacao, ModoAcessibilidade, Pergunta, Resposta, TextosTotem } from "@/types";
 import { ApiError } from "@/types";
 import { api } from "./api";
 
@@ -29,6 +29,11 @@ export function responder(id: number, resposta: Resposta) {
   return api<Atendimento>(API_ROUTES.atendimentos.responder(id), { method: "POST", body: resposta });
 }
 
+/** Nome e CPF do paciente. Obrigatório antes de finalizar (422 = nome/CPF inválido). */
+export function identificarPaciente(id: number, dados: Identificacao) {
+  return api<Atendimento>(API_ROUTES.atendimentos.identificar(id), { method: "PUT", body: dados });
+}
+
 export function finalizarAtendimento(id: number) {
   return api<Finalizacao>(API_ROUTES.atendimentos.finalizar(id), { method: "POST" });
 }
@@ -38,7 +43,8 @@ export function mensagemDeErro(err: unknown): string {
   if (err instanceof ApiError) {
     const detail = (err.body as { detail?: unknown } | undefined)?.detail;
     if (typeof detail === "string") return detail;
-    if (Array.isArray(detail) && detail[0]?.msg) return String(detail[0].msg);
+    // Validação (422): "Value error, CPF inválido" → "CPF inválido"
+    if (Array.isArray(detail) && detail[0]?.msg) return String(detail[0].msg).replace(/^Value error,\s*/i, "");
     return `O sistema da unidade respondeu com erro ${err.status}.`;
   }
   return "Não consegui falar com o sistema da unidade. Verifique a internet.";

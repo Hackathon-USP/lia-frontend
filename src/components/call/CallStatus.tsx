@@ -23,10 +23,9 @@ interface Props {
 export function CallStatus({ carregando, lento, erro, onTentarDeNovo, listenError, voiceBlocked }: Props) {
   return (
     <div className="mx-auto flex min-h-20 w-full max-w-3xl flex-col justify-center gap-3 px-6 py-3" aria-live="polite">
-      {carregando && (
-        <p className="rounded-2xl bg-tinta/85 px-4 py-2 text-white">
-          {lento ? "Conectando ao sistema da unidade… pode levar até 1 minuto." : "LIA está pensando…"}
-        </p>
+      {/* "LIA está pensando" fica no indicador de vez; aqui só o aviso de demora. */}
+      {carregando && lento && (
+        <p className="rounded-2xl bg-tinta/85 px-4 py-2 text-white">Conectando ao sistema da unidade… pode levar até 1 minuto.</p>
       )}
       {erro && (
         <p role="alert" className="flex flex-wrap items-center justify-center gap-3 rounded-2xl bg-red-700 px-4 py-2 text-white">
@@ -50,9 +49,8 @@ export function CallStatus({ carregando, lento, erro, onTentarDeNovo, listenErro
   );
 }
 
-/** O que o paciente está dizendo agora (microfone) ou a última resposta dele. */
-export function UserEcho({ interim, userCaption }: { interim: string; userCaption: string }) {
-  if (interim) return <p className="mx-auto w-full max-w-3xl px-8 text-lg text-white/80 italic">Você está dizendo · {interim}…</p>;
-  if (userCaption) return <p className="mx-auto w-full max-w-3xl px-8 text-lg text-white/80">Sua última resposta · {userCaption}</p>;
-  return null;
+/** A última coisa que o paciente disse (o que está dizendo agora aparece no indicador de vez). */
+export function UserEcho({ userCaption }: { userCaption: string }) {
+  if (!userCaption) return null;
+  return <p className="mx-auto w-full max-w-3xl px-8 text-lg text-white/80">Você disse · {userCaption}</p>;
 }

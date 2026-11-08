@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" role="img" aria-label="Foto provisória da equipe">
+  <!-- Foto provisória da equipe: troque por um .jpg em 16:9 (ex.: 1600x900). -->
+  <defs>
+    <linearGradient id="fundo" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e1efeb"/>
+      <stop offset="1" stop-color="#cfe5df"/>
+    </linearGradient>
+  </defs>
+  <rect width="1600" height="900" fill="url(#fundo)"/>
+  <g fill="#0b6e5f" opacity="0.25">
+    <circle cx="520" cy="360" r="95"/>
+    <path d="M330 900c0-150 85-250 190-250s190 100 190 250z"/>
+    <circle cx="800" cy="330" r="105"/>
+    <path d="M590 900c0-165 95-275 210-275s210 110 210 275z"/>
+    <circle cx="1080" cy="360" r="95"/>
+    <path d="M890 900c0-150 85-250 190-250s190 100 190 250z"/>
+  </g>
+  <circle cx="800" cy="210" r="16" fill="#f2b33d"/>
+</svg>

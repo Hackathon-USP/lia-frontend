@@ -3,7 +3,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 /*
  * A LIA ouvindo: reconhecimento de fala do navegador (Web Speech API), em português do Brasil.
  * Funciona no Chrome e no Edge (o áudio é transcrito pelo serviço do navegador, precisa de internet).
- * Enquanto a LIA fala, o microfone pausa — senão ela "ouve" a própria voz.
+ * O microfone fica aberto mesmo com a LIA falando (o paciente pode interromper); quem usa
+ * descarta o eco da voz dela (ver usePatientInput).
  */
 
 interface SRAlternative {

@@ -23,6 +23,12 @@
   --color-menta: #e1efeb;
 }
 
+/* Ondas do indicador "Sua vez" / "Ouvindo você" (TurnoIndicador). */
+@keyframes onda {
+  0%, 100% { transform: scaleY(0.45); }
+  50% { transform: scaleY(1); }
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
     --background: #0a0a0a;
