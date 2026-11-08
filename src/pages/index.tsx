@@ -13,7 +13,7 @@ const LiaVitrine = dynamic(() => import("@/components/home/LiaVitrine").then((m)
   ssr: false,
   loading: () => (
     <div className="flex aspect-[4/5] flex-col items-center justify-center gap-4 rounded-4xl bg-[#E6E1D8] text-lg font-bold text-tinta shadow-xl">
-      <Image src="/assets/icon.jpeg" alt="" width={88} height={88} className="size-22 rounded-3xl shadow-lg" />
+      <Image src="/assets/favicon.png" alt="" width={88} height={88} className="size-22 drop-shadow-md" />
       A LIA está chegando…
     </div>
   ),

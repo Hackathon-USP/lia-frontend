@@ -93,7 +93,7 @@ export function IdentificacaoForm({ instrucao, rascunho, onMudar, erro, carregan
       )}
 
       <button type="submit" disabled={!completo || carregando} className={`${primaryButton} w-full`}>
-        {carregando ? "Gerando sua senha…" : "Confirmar e pegar a senha"}
+        {carregando ? "Enviando…" : "Confirmar e revisar respostas"}
       </button>
       <p className="text-base text-white/80">Seus dados ficam só com a equipe da unidade.</p>
     </form>
