@@ -35,21 +35,108 @@ export function respostaDoSinal(pergunta: Pergunta, sinal: string): string | num
 function entenderLibras(pergunta: Pergunta, frase: string): string | number | null {
   const exata = respostaDoSinal(pergunta, frase);
   if (exata !== null) return exata;
-  for (const glosa of frase.split(/\s+/)) {
+  const glosas = frase.split(/\s+/).filter(Boolean);
+  for (const glosa of glosas) {
     const valor = respostaDoSinal(pergunta, glosa);
     if (valor !== null) return valor;
   }
+  // Sinais que não são o rótulo da opção, mas querem dizer a mesma coisa (ESTÔMAGO → barriga).
+  const extra = LIBRAS_EXTRA[pergunta.id];
+  if (extra && pergunta.tipo !== "escala") {
+    for (const glosa of glosas) {
+      const chave = chaveDoSinal(glosa);
+      const opcao = pergunta.opcoes.find((o) => (extra[o.id] ?? []).some((s) => chaveDoSinal(s) === chave));
+      if (opcao) return opcao.id;
+    }
+  }
+  return respostaSimNao(pergunta, frase);
+}
+
+/* ---------- sim / não ---------- */
+
+/** Jeitos de concordar, em português falado e em glosas de Libras (já normalizados). */
+const SIM_PALAVRAS = new Set([
+  "SIM", "CONCORDO", "CONCORDAR", "ACEITO", "ACEITAR", "CLARO", "PODE", "OK", "OKAY", "OKEI", "TA", "BELEZA",
+  "AUTORIZO", "CERTO", "CORRETO", "CERTISSIMO", "ISSO", "EXATO", "EXATAMENTE", "PERFEITO", "POSITIVO", "AFIRMATIVO",
+  "CONFIRMO", "CONFIRMAR", "CONFIRMADO", "QUERO", "QUERER", "BORA", "VAMOS", "PRONTO", "UHUM", "AHAM", "ANHAM",
+  "TRANQUILO", "FECHADO", "LOGICO",
+]);
+/** Frases inteiras que concordam (procuradas na frase toda, com espaço nas pontas). */
+const SIM_FRASES = [
+  "ESTA CERTO", "TA CERTO", "TUDO CERTO", "ESTA CORRETO", "TA CORRETO", "ISSO MESMO", "ISSO AI", "E ISSO",
+  "PODE SER", "PODE SEGUIR", "PODE CONTINUAR", "PODE IR", "COM CERTEZA", "ESTA BEM", "TA BEM", "TA BOM",
+  "ESTA BOM", "TUDO BEM", "TUDO BOM", "PODE CONFIRMAR", "PODE MANDAR", "VAMOS LA", "BORA LA",
+];
+/** Frases com "não" que, na verdade, concordam. */
+const SIM_COM_NAO = ["NAO TEM PROBLEMA", "NAO TENHO PROBLEMA", "POR QUE NAO", "PORQUE NAO", "NAO HA PROBLEMA", "SEM PROBLEMA"];
+/** Jeitos de discordar ou dizer que está errado. */
+const NAO_PALAVRAS = new Set([
+  "NAO", "NEGATIVO", "NUNCA", "JAMAIS", "ERRADO", "ERRADA", "INCORRETO", "INCORRETA", "DISCORDO", "RECUSO",
+  "CORRIGIR", "MUDAR", "TROCAR", "NEM", "NAOO", "NAUM", "NADA",
+]);
+
+/** Palavras em maiúsculas, sem acento: "Tá certo!" → " TA CERTO " (com espaço nas pontas). */
+function frasePronta(frase: string) {
+  return normalizarFrase(frase);
+}
+
+/**
+ * A frase (sinalizada, falada ou digitada) é um "sim" ou um "não"?
+ * Entende jeitos comuns de falar ("isso mesmo", "pode seguir", "tá errado") e glosas (CERTO, ERRADO).
+ */
+export function simOuNao(frase: string): "sim" | "nao" | null {
+  const texto = frasePronta(frase);
+  const palavras = texto.trim().split(" ").filter(Boolean);
+  if (!palavras.length) return null;
+  if (SIM_COM_NAO.some((f) => texto.includes(` ${f} `))) return "sim";
+  // "não" primeiro: "não concordo", "não está certo" e "tá errado" são não.
+  if (palavras.some((p) => NAO_PALAVRAS.has(p))) return "nao";
+  if (SIM_FRASES.some((f) => texto.includes(` ${f} `))) return "sim";
+  if (palavras.some((p) => SIM_PALAVRAS.has(p))) return "sim";
   return null;
 }
 
-/** A frase (sinalizada, falada ou digitada) é um "sim" ou um "não"? (para o consentimento) */
-export function simOuNao(frase: string): "sim" | "nao" | null {
-  const glosas = frase.split(/\s+/).map(normalizarSinal);
-  // "não" primeiro: "não concordo" é não.
-  if (glosas.some((g) => g === "NAO")) return "nao";
-  if (glosas.some((g) => ["SIM", "CONCORDO", "ACEITO", "CLARO", "PODE", "OK", "OKAY", "TA", "BELEZA", "AUTORIZO"].includes(g))) return "sim";
-  return null;
+/** Em perguntas de sim/não (opções "sim" e "nao"), usa o entendimento de sim/não acima. */
+function respostaSimNao(pergunta: Pergunta, frase: string): string | null {
+  if (pergunta.tipo === "escala") return null;
+  const ids = new Set(pergunta.opcoes.map((o) => o.id));
+  if (!ids.has("sim") || !ids.has("nao")) return null;
+  return simOuNao(frase);
 }
+
+/** Sinais de Libras que valem como cada opção, além do rótulo e dos sinais que vêm do back. */
+const LIBRAS_EXTRA: Record<string, Record<string, string[]>> = {
+  motivo: {
+    consulta: ["MÉDICO", "CONSULTA"],
+    exame: ["EXAME"],
+    retorno: ["RETORNO"],
+    sintoma: ["DOR", "DOENTE", "FEBRE", "TOSSE", "TONTURA", "VÔMITO", "ENJOO", "GRIPE", "MACHUCAR", "SANGRAR"],
+  },
+  sintoma: {
+    dor: ["MACHUCAR", "CORTE", "QUEIMAR"],
+    febre: ["CALOR", "QUENTE"],
+    falta_de_ar: ["RESPIRAR", "CANSAÇO"],
+    tosse: ["GRIPE", "RESFRIADO"],
+    tontura: ["DESMAIAR", "FRACO", "PRESSÃO"],
+    vomito: ["ENJOO", "DIARREIA"],
+  },
+  local_dor: {
+    cabeca: ["OLHO", "OUVIDO", "NARIZ", "BOCA", "DENTE"],
+    barriga: ["ESTÔMAGO"],
+    peito: ["CORAÇÃO"],
+    costas: ["COSTAS"],
+    outro: ["BRAÇO", "PERNA", "PÉ", "MÃO", "PESCOÇO", "JOELHO", "PELE", "GARGANTA"],
+  },
+  desde_quando: {
+    hoje: ["HOJE", "AGORA", "MANHÃ", "TARDE", "NOITE", "HORA"],
+    "1_3_dias": ["ONTEM", "1", "2", "3"],
+    mais_3_dias: ["4", "5", "6"],
+    mais_1_semana: ["SEMANA", "MÊS", "ANO", "SEMPRE"],
+  },
+  prioridade: {
+    sim: ["GRÁVIDA", "IDOSO", "DEFICIENTE", "SURDO", "CRIANÇA", "BEBÊ", "PREFERENCIAL"],
+  },
+};
 
 /* ---------- português (voz ou texto digitado) ---------- */
 
@@ -67,25 +154,30 @@ const NUMEROS: Record<string, number> = {
 /** Jeitos comuns de dizer cada opção, além dos sinais e do rótulo que vêm do back. */
 const FALA_EXTRA: Record<string, Record<string, string[]>> = {
   motivo: {
-    consulta: ["MEDICA", "MARCADA", "AGENDADA", "CONSULTAR"],
-    exame: ["EXAMES"],
-    retorno: ["VOLTEI", "VOLTANDO"],
-    sintoma: ["SENTINDO", "SINTO", "DOR", "DORES", "PASSANDO MAL", "DOENTE", "FEBRE", "TOSSE", "TONTURA"],
-    outro: ["OUTRA COISA"],
+    consulta: ["MEDICA", "MARCADA", "AGENDADA", "CONSULTAR", "MEDICO", "DOUTOR", "DOUTORA", "HORARIO"],
+    exame: ["EXAMES", "RESULTADO", "COLETA", "SANGUE"],
+    retorno: ["VOLTEI", "VOLTANDO", "VOLTAR", "VOLTA", "RETORNAR", "MOSTRAR"],
+    sintoma: [
+      "SENTINDO", "SINTO", "DOR", "DORES", "DOENDO", "PASSANDO MAL", "MAL", "DOENTE", "FEBRE", "TOSSE", "TONTURA",
+      "ENJOO", "VOMITO", "GRIPE", "GRIPADO", "GRIPADA", "MACHUQUEI", "MACHUCADO", "MACHUCADA",
+    ],
+    outro: ["OUTRA COISA", "OUTRO ASSUNTO", "INFORMACAO", "VACINA", "REMEDIO", "RECEITA"],
   },
   sintoma: {
-    dor: ["DORES", "DOENDO", "DOI"],
-    febre: ["FEBRE", "QUENTE"],
-    falta_de_ar: ["FALTA DE AR", "RESPIRAR", "RESPIRANDO", "FOLEGO"],
-    tosse: ["TOSSINDO"],
-    tontura: ["TONTA", "TONTO", "ZONZO", "ZONZA"],
-    vomito: ["VOMITANDO", "ENJOADO", "ENJOADA", "NAUSEA", "ENJOO"],
+    dor: ["DORES", "DOENDO", "DOI", "DOIDO", "MACHUCADO", "MACHUCADA", "MACHUQUEI", "CORTEI"],
+    febre: ["FEBRE", "QUENTE", "CALAFRIO", "CALAFRIOS"],
+    falta_de_ar: ["FALTA DE AR", "RESPIRAR", "RESPIRANDO", "FOLEGO", "SUFOCADO", "SUFOCADA", "CANSADO PARA RESPIRAR"],
+    tosse: ["TOSSINDO", "CATARRO", "PIGARRO"],
+    tontura: ["TONTA", "TONTO", "ZONZO", "ZONZA", "DESMAIO", "DESMAIEI", "VERTIGEM", "LABIRINTITE"],
+    vomito: ["VOMITANDO", "VOMITEI", "ENJOADO", "ENJOADA", "NAUSEA", "ENJOO", "DIARREIA"],
     outro: ["OUTRA COISA"],
   },
   local_dor: {
-    barriga: ["ESTOMAGO", "ABDOMEN", "BARRIGA"],
-    costas: ["COLUNA", "LOMBAR"],
-    outro: ["OUTRO LUGAR", "OUTRA PARTE"],
+    cabeca: ["ENXAQUECA", "TESTA", "OLHO", "OLHOS", "OUVIDO", "DENTE"],
+    barriga: ["ESTOMAGO", "ABDOMEN", "BARRIGA", "BARRIGUINHA", "INTESTINO"],
+    peito: ["CORACAO", "TORAX"],
+    costas: ["COLUNA", "LOMBAR", "LOMBO"],
+    outro: ["OUTRO LUGAR", "OUTRA PARTE", "BRACO", "PERNA", "PE", "MAO", "JOELHO", "PESCOCO", "GARGANTA"],
   },
   desde_quando: {
     hoje: ["HOJE", "AGORA", "AGORINHA", "HOJE CEDO"],
@@ -133,7 +225,8 @@ export function entenderFala(pergunta: Pergunta, frase: string): string | number
       }
     }
   }
-  return melhor ? melhor.id : frase;
+  if (melhor) return melhor.id;
+  return respostaSimNao(pergunta, frase) ?? frase;
 }
 
 /* ---------- ponto de entrada ---------- */

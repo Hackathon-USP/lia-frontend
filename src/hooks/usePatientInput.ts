@@ -17,7 +17,9 @@ import { useSignRecognition } from "./useSignRecognition";
  */
 
 /** Depois que a LIA para de falar, o fim da voz dela ainda pode chegar pelo microfone. */
-const ECO_JANELA_MS = 1500;
+const ECO_JANELA_MS = 3000;
+/** Frase final com menos palavras que isso é sempre do paciente (o eco da LIA chega em trechos longos). */
+const MIN_PALAVRAS_ECO = 4;
 /** Palavras ouvidas (que não são eco) para a LIA parar de falar. */
 const PALAVRAS_PARA_INTERROMPER = 2;
 
@@ -69,22 +71,28 @@ export function usePatientInput({ active, training, busy, dictating = false, cam
    * O que o microfone pega da própria voz da LIA (eco) é descartado.
    */
   const { talking } = lia;
+  // O eco vem da VOZ da LIA (não do avatar, que continua sinalizando depois que a voz acaba).
+  const falandoAgora = lia.voice.speaking;
   const fimDaFala = useRef(0);
   useEffect(() => {
-    if (!talking) fimDaFala.current = Date.now();
-  }, [talking]);
+    if (!falandoAgora) fimDaFala.current = Date.now();
+  }, [falandoAgora]);
 
-  function eco(text: string) {
+  function eco(text: string, { soDuranteAFala = false } = {}) {
     const { text: legenda, isTranslation } = lia.caption;
     if (isTranslation || !lia.voice.enabled) return false; // sem voz dela, não há eco
-    const recente = talking || Date.now() - fimDaFala.current < ECO_JANELA_MS;
+    const recente = falandoAgora || (!soDuranteAFala && Date.now() - fimDaFala.current < ECO_JANELA_MS);
     return recente && ehEco(text, legenda);
   }
 
   const ouvido = useListening({
     paused: !active,
     onFinal: (text) => {
-      if (eco(text)) return;
+      // Respostas curtas ("sim", "isso mesmo", "está tudo certo") repetem palavras da pergunta:
+      // só contam como eco enquanto a voz da LIA ainda está tocando. No ditado do CPF, qualquer
+      // eco é descartado (a voz dela fala números: "faltam 5").
+      const curta = contarPalavras(text) < MIN_PALAVRAS_ECO;
+      if (eco(text, { soDuranteAFala: curta && !dictating })) return;
       if (talking) lia.interromper();
       enviar(text, "voz");
     },

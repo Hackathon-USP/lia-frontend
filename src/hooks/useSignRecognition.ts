@@ -46,6 +46,11 @@ const SERVER_CURSOR_KEY = "lia:sinais:servidor:cursor";
 /** Usar os exemplos do avatar do VLibras no reconhecimento (padrão: sim). */
 const USE_VLIBRAS_KEY = "lia:sinais:usar-vlibras";
 
+/** Sinais do `vocabulario.json` que este navegador já conhecia (para receber só os novos). */
+const SEEN_VOCAB_KEY = "lia:sinais:vocabulario-visto";
+/** Tamanho do vocabulário original (versão 1 do `vocabulario.json`), antes da ampliação. */
+const LEGACY_VOCAB_SIZE = 27;
+
 const ALPHABET = parseAlphabet(alphabetFile);
 const DEFAULT_SIGNS = glossesOf(parseVocabulary(vocabFile));
 
@@ -161,7 +166,15 @@ function writeJSON(key: string, value: unknown) {
 
 /** Sinais que o totem reconhece neste navegador (o vocabulário mais os que a equipe acrescentou). */
 export function savedSignList(): string[] {
-  return readJSON(SIGNS_KEY, DEFAULT_SIGNS);
+  const saved = readJSON<string[] | null>(SIGNS_KEY, null);
+  if (!saved) return DEFAULT_SIGNS;
+  // A lista salva neste navegador recebe os sinais que entraram no vocabulário depois dela.
+  // Os que a equipe apagou de propósito continuam apagados (já estavam no vocabulário visto).
+  // Sem o registro do que já foi visto (listas antigas), vale o vocabulário de antes: 27 sinais.
+  const seen = new Set(readJSON<string[]>(SEEN_VOCAB_KEY, DEFAULT_SIGNS.slice(0, LEGACY_VOCAB_SIZE)));
+  const have = new Set(saved);
+  const novos = DEFAULT_SIGNS.filter((g) => !seen.has(g) && !have.has(g));
+  return novos.length ? [...saved, ...novos] : saved;
 }
 
 /** Apelido deste aparelho nas gravações (serve para a avaliação por pessoa na bancada). */
@@ -228,7 +241,7 @@ export function useSignRecognition({ videoRef, overlayRef, enabled, onPhrase, ca
   const [vlibrasCounts, setVlibrasCounts] = useState<Record<string, number>>({});
   const [vlibrasEnabled, setVlibrasEnabledState] = useState(() => readJSON(USE_VLIBRAS_KEY, true));
   const vlibrasEnabledRef = useRef(vlibrasEnabled);
-  const [signList, setSignList] = useState<string[]>(() => readJSON(SIGNS_KEY, DEFAULT_SIGNS));
+  const [signList, setSignList] = useState<string[]>(() => savedSignList());
   const [models, setModels] = useState<{ signs: ModelInfo; letters: LetterModelInfo | null } | null>(null);
   const [modelError, setModelError] = useState(false);
   const [hadOldData] = useState(() => readJSON<unknown>(OLD_DATA_KEY, null) !== null);
@@ -247,7 +260,10 @@ export function useSignRecognition({ videoRef, overlayRef, enabled, onPhrase, ca
     onPhraseRef.current = onPhrase;
     canSendRef.current = canSend;
   });
-  useEffect(() => writeJSON(SIGNS_KEY, signList), [signList]);
+  useEffect(() => {
+    writeJSON(SIGNS_KEY, signList);
+    writeJSON(SEEN_VOCAB_KEY, DEFAULT_SIGNS);
+  }, [signList]);
   useEffect(() => () => recordingAbort.current?.abort(), []);
 
   /** Recarrega contagens e modelos a partir das gravações (IndexedDB). */
