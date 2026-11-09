@@ -82,14 +82,59 @@ export async function resolveVLibrasGloss(
 }
 
 /**
+ * O tradutor do VLibras falha de vez em quando ("Translation Core Unavailable", status 500) e
+ * responde certo logo na tentativa seguinte. Por isso cada tradução tenta até 3 vezes.
+ */
+const TRANSLATE_RETRY_DELAYS_MS = [300, 900];
+
+/** As frases do totem se repetem a cada paciente: a glosa já traduzida é reaproveitada. */
+const glossCache = new Map<string, string>();
+const GLOSS_CACHE_MAX = 200;
+
+function wait(ms: number, signal?: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timer);
+        reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
+      },
+      { once: true },
+    );
+  });
+}
+
+/**
  * Traduz um texto em português para a glosa de Libras que o avatar sinaliza.
  * Ex.: "Olá, qual é a sua queixa?" → "OLÁ QUAL SEU QUEIXA [INTERROGAÇÃO]"
  */
 export async function translateToGloss(text: string, signal?: AbortSignal): Promise<string> {
+  const prepared = protectNames(prepareForLibras(text));
+  const cached = glossCache.get(prepared);
+  if (cached) return cached;
+
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= TRANSLATE_RETRY_DELAYS_MS.length; attempt++) {
+    if (attempt > 0) await wait(TRANSLATE_RETRY_DELAYS_MS[attempt - 1], signal);
+    try {
+      const gloss = await requestGloss(prepared, signal);
+      if (glossCache.size >= GLOSS_CACHE_MAX) glossCache.delete(glossCache.keys().next().value as string);
+      glossCache.set(prepared, gloss);
+      return gloss;
+    } catch (err) {
+      if (signal?.aborted) throw err;
+      lastError = err;
+    }
+  }
+  throw lastError;
+}
+
+async function requestGloss(prepared: string, signal?: AbortSignal): Promise<string> {
   const res = await fetch(env.vlibrasTranslateUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text: protectNames(prepareForLibras(text)) }),
+    body: JSON.stringify({ text: prepared }),
     signal,
   });
   if (!res.ok) throw new Error(`VLibras: erro ${res.status} na tradução`);

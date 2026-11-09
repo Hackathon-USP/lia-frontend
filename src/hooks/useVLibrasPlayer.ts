@@ -25,8 +25,12 @@ export function useVLibrasPlayer(avatar: VLibrasAvatar = "hosana") {
   /** Recebeu a frase mas ainda está baixando os sinais (na 1ª vez leva alguns segundos). */
   const [preparing, setPreparing] = useState(false);
   const pendingGloss = useRef<string | null>(null);
-  /** Última frase enviada (para repetir se algo interromper). */
+  /** Última frase enviada (para repetir se a troca de avatar interromper). */
   const lastGloss = useRef<string | null>(null);
+  /** O avatar está sinalizando agora (último aviso do player). */
+  const isPlayingNow = useRef(false);
+  /** Muda a cada play()/stop(): uma repetição agendada antes disso é descartada. */
+  const playId = useRef(0);
 
   const send = useCallback((object: string, method: string, params?: string | number) => {
     iframeRef.current?.contentWindow?.postMessage({ type: "unity", object, method, params }, PLAYER_ORIGIN);
@@ -36,6 +40,7 @@ export function useVLibrasPlayer(avatar: VLibrasAvatar = "hosana") {
     (gloss: string) => {
       setGlossIndex(-1);
       lastGloss.current = gloss;
+      playId.current += 1;
       if (!ready) {
         pendingGloss.current = gloss; // toca assim que o player terminar de carregar
         return;
@@ -47,6 +52,8 @@ export function useVLibrasPlayer(avatar: VLibrasAvatar = "hosana") {
 
   const stop = useCallback(() => {
     pendingGloss.current = null;
+    lastGloss.current = null;
+    playId.current += 1;
     setPlaying(false);
     setGlossIndex(-1);
     send("PlayerManager", "stopAll");
@@ -84,11 +91,20 @@ export function useVLibrasPlayer(avatar: VLibrasAvatar = "hosana") {
           break;
         case "get_avatar":
           // O player avisou qual avatar está na tela; se não for o da LIA, troca
-          // e repete a frase que a troca interrompeu.
+          // e repete a frase que a troca interrompeu. Só repete se o avatar estava sinalizando
+          // naquele momento: uma frase que já terminou (ou que ainda espera o player ficar pronto)
+          // não é sinalizada duas vezes.
           if (typeof e.data.data === "string" && !e.data.data.toLowerCase().startsWith(avatar.slice(0, 3))) {
             send("PlayerManager", "Change", avatar);
-            const last = lastGloss.current;
-            if (last) timers.push(setTimeout(() => send("PlayerManager", "playNow", last), 700));
+            const last = isPlayingNow.current ? lastGloss.current : null;
+            if (last) {
+              const id = playId.current;
+              timers.push(
+                setTimeout(() => {
+                  if (playId.current === id) send("PlayerManager", "playNow", last);
+                }, 700),
+              );
+            }
           }
           break;
         case "on_playing_state_change": {
@@ -97,6 +113,7 @@ export function useVLibrasPlayer(avatar: VLibrasAvatar = "hosana") {
           setPlaying(isPlaying && !isPaused);
           setPreparing(isPlaying && isLoading);
           if (!isPlaying) setGlossIndex(-1);
+          isPlayingNow.current = isPlaying;
           break;
         }
         case "counter_gloss": {

@@ -28,6 +28,19 @@ export interface LiaCaptionState {
 
 const EMPTY_CAPTION: LiaCaptionState = { text: "", gloss: "", isTranslation: false, translateError: false };
 
+/** Depois de terminar uma frase, por quanto tempo a mesma frase não é repetida. */
+const REPEAT_GUARD_MS = 4000;
+
+/** Texto sem acentos, pontuação e maiúsculas, para comparar frases. */
+function normalizeForCompare(text: string) {
+  return text
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
 export interface SayOptions {
   /** Falar em voz alta (padrão). false = só sinaliza e legenda (tradução da fala de alguém). */
   voice?: boolean;
@@ -42,9 +55,27 @@ export function useLiaPresenter(avatar: VLibrasAvatar) {
   const [caption, setCaption] = useState<LiaCaptionState>(EMPTY_CAPTION);
   /** Muda a cada say()/reset()/interromper(): traduções que chegam atrasadas são descartadas. */
   const version = useRef(0);
+  /** Última frase dita em voz alta e quando (para não repetir a mesma frase em seguida). */
+  const lastSpoken = useRef({ text: "", at: 0 });
+  const talkingRef = useRef(false);
+  useEffect(() => {
+    const talkingNow = speaking || playing;
+    // Acabou de falar/sinalizar: a janela de "não repetir" conta a partir daqui.
+    if (talkingRef.current && !talkingNow) lastSpoken.current.at = Date.now();
+    talkingRef.current = talkingNow;
+  }, [speaking, playing]);
 
   const say = useCallback(
     async (text: string, { voice: withVoice = true }: SayOptions = {}) => {
+      // A mesma frase (ou um pedaço dela) logo depois de dizê-la: costuma ser o microfone
+      // ouvindo a própria LIA. Não repete; a legenda continua na tela.
+      if (withVoice) {
+        const said = lastSpoken.current;
+        const recent = talkingRef.current || Date.now() - said.at < REPEAT_GUARD_MS;
+        const novo = normalizeForCompare(text);
+        if (recent && novo && said.text.includes(novo)) return;
+        lastSpoken.current = { text: novo, at: Date.now() };
+      }
       const current = ++version.current;
       setCaption({ text, gloss: "", isTranslation: !withVoice, translateError: false });
       hush();
@@ -72,6 +103,7 @@ export function useLiaPresenter(avatar: VLibrasAvatar) {
   /** Para avatar e voz e limpa a legenda (troca de paciente). */
   const reset = useCallback(() => {
     interromper();
+    lastSpoken.current = { text: "", at: 0 };
     setCaption(EMPTY_CAPTION);
   }, [interromper]);
 
