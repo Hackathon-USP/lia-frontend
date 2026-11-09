@@ -10,6 +10,7 @@ import {
   useVLibrasTraining,
   VLIBRAS_AVATARS,
   type TrainingSign,
+  type VideoSource,
   type VLibrasAvatar,
 } from "@/hooks/useVLibrasTraining";
 import { CameraSignTrainer } from "./CameraSignTrainer";
@@ -49,6 +50,77 @@ function Panel({ title, children, aside }: { title: string; children: React.Reac
       </div>
       {children}
     </section>
+  );
+}
+
+const VIDEO_SOURCES: { id: VideoSource; label: string }[] = [
+  { id: "v-librasil", label: "V-LIBRASIL (UFPE)" },
+  { id: "minds", label: "MINDS-Libras (UFMG)" },
+  { id: "proprio", label: "Gravação própria" },
+];
+
+/** Importa vídeos de pessoas reais sinalizando (bases públicas ou gravações em arquivo). */
+function VideoImportPanel({ t, busy }: { t: ReturnType<typeof useVLibrasTraining>; busy: boolean }) {
+  const [source, setSource] = useState<VideoSource>("v-librasil");
+  const [signer, setSigner] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+  const v = t.videoImport;
+  const importing = !!v?.running;
+
+  return (
+    <Panel title="Importar vídeos de pessoas reais">
+      <p className="mb-3 text-sm text-tinta-suave">
+        Vídeos de intérpretes ensinam a LIA a reconhecer pessoas de verdade (o avatar sozinho não basta). O nome do arquivo diz o
+        sinal: <code>DOR.mp4</code>, <code>DOR__ana.mp4</code> (sinal e pessoa) ou o nome original da V-LIBRASIL (
+        <code>Medico (Doutor)_Articulador1.mp4</code>). Os exemplos ficam neste navegador.
+      </p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="block text-sm">
+          <span className="mb-1 block font-semibold">De onde vêm os vídeos</span>
+          <select value={source} onChange={(e) => setSource(e.target.value as VideoSource)} disabled={importing || busy} className={`${campo} w-full`}>
+            {VIDEO_SOURCES.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block text-sm">
+          <span className="mb-1 block font-semibold">Quem sinaliza (se o nome não disser)</span>
+          <input value={signer} onChange={(e) => setSigner(e.target.value)} placeholder="ex.: ana" maxLength={40} disabled={importing || busy} className={`${campo} w-full`} />
+        </label>
+      </div>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="video/*"
+        multiple
+        aria-label="Vídeos de sinais"
+        className="hidden"
+        onChange={(e) => {
+          const files = [...(e.target.files ?? [])];
+          e.target.value = "";
+          if (files.length) void t.importVideos(files, source, signer);
+        }}
+      />
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <button type="button" onClick={() => inputRef.current?.click()} disabled={!t.captureEngine || importing || busy} className={`${btn} ${btnPrimario}`}>
+          {importing ? "Importando…" : "Escolher vídeos"}
+        </button>
+        {v && (
+          <p className="text-sm text-tinta-suave" aria-live="polite">
+            {v.done} de {v.total} · {v.imported} importados · {v.skipped} pulados · {v.failed} com erro
+            {v.current ? ` · ${v.current}` : ""}
+          </p>
+        )}
+      </div>
+      {source === "v-librasil" && (
+        <p className="mt-3 text-xs text-tinta-suave">
+          V-LIBRASIL: uso para pesquisa e ensino; não redistribua os vídeos e peça autorização à UFPE para uso comercial. Cite
+          Rodrigues, A. J. (2021), dissertação de mestrado, CIn-UFPE.
+        </p>
+      )}
+    </Panel>
   );
 }
 
@@ -224,6 +296,8 @@ export function TreinoScreen() {
               )}
             </div>
           </Panel>
+
+          <VideoImportPanel t={t} busy={running || t.uploading || t.evaluating} />
           <Panel title="Avatar do VLibras">
             <AvatarStage iframeRef={iframeRef} overlay={overlay} />
             <p className="mt-3 text-sm text-tinta-suave">

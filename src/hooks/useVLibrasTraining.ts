@@ -4,6 +4,7 @@ import {
   BODY_CONNECTIONS,
   createLiaVision,
   evaluate,
+  glossFromVideoName,
   HAND_CONNECTIONS,
   isLetterGloss,
   LiaVisionError,
@@ -15,6 +16,7 @@ import {
   type RawFrame,
   type Sample,
   type SampleMeta,
+  type SampleSource,
 } from "@/lib/libras";
 import { CAPTURE_PLAYER_PATH, VLibrasCapturePlayer, VLIBRAS_AVATARS, type VLibrasAvatar } from "@/lib/vlibras/capture-player";
 import { env } from "@/config/env";
@@ -104,6 +106,22 @@ function writeSent(ids: Set<string>) {
   }
 }
 
+/** Fontes de vídeos de pessoas reais que a tela importa. */
+export type VideoSource = Extract<SampleSource, "v-librasil" | "minds" | "proprio">;
+/** Amostras de pessoas reais (tudo o que não é o avatar do VLibras). */
+const PEOPLE_SOURCES: SampleSource[] = ["proprio", "v-librasil", "minds"];
+
+export interface VideoImportState {
+  running: boolean;
+  total: number;
+  done: number;
+  imported: number;
+  skipped: number;
+  failed: number;
+  /** Arquivo sendo processado agora. */
+  current: string;
+}
+
 function errorText(err: unknown): string {
   if (err instanceof LiaVisionError) return err.message;
   return (err as Error)?.message ?? String(err);
@@ -162,6 +180,7 @@ export function useVLibrasTraining(iframeRef: RefObject<HTMLIFrameElement | null
   const [uploading, setUploading] = useState(false);
   const [evaluating, setEvaluating] = useState(false);
   const [evaluation, setEvaluation] = useState<EvaluationSummary | null>(null);
+  const [videoImport, setVideoImport] = useState<VideoImportState | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const logId = useRef(0);
 
@@ -430,6 +449,56 @@ export function useVLibrasTraining(iframeRef: RefObject<HTMLIFrameElement | null
     await refreshLocal(lia);
   }, [lia, addLog, refreshLocal]);
 
+  /* ---------- vídeos de pessoas reais (V-LIBRASIL, MINDS, gravações em arquivo) ---------- */
+
+  /**
+   * Importa vídeos pelo mesmo pipeline da câmera do totem. A glosa (e, se houver, quem sinaliza)
+   * sai do nome do arquivo; vídeos já importados (mesmo nome e fonte) são pulados.
+   * As amostras ficam neste navegador: é daqui que o reconhecimento do totem as usa.
+   */
+  const importVideos = useCallback(
+    async (files: readonly File[], source: VideoSource, defaultSigner: string) => {
+      if (!lia || videoImport?.running) return;
+      const vocabulary = [...new Set(savedSignList().map(normalizeGloss))].filter((g) => g && !isLetterGloss(g));
+      const existing = new Set((await lia.dataset.list({ source })).map((m) => m.origin).filter(Boolean));
+      const state: VideoImportState = { running: true, total: files.length, done: 0, imported: 0, skipped: 0, failed: 0, current: "" };
+      setVideoImport({ ...state });
+      for (const file of files) {
+        state.current = file.name;
+        setVideoImport({ ...state });
+        const match = glossFromVideoName(file.name, vocabulary);
+        const signer = match?.signer ?? defaultSigner.trim();
+        if (!match) {
+          state.skipped += 1;
+          addLog("aviso", `${file.name}: nenhum sinal do vocabulário com esse nome.`);
+        } else if (existing.has(file.name)) {
+          state.skipped += 1;
+        } else if (!signer) {
+          state.failed += 1;
+          addLog("erro", `${file.name}: informe quem sinaliza no vídeo.`);
+        } else {
+          try {
+            const r = await lia.dataset.importVideo(file, match.gloss, { signer, source, origin: file.name });
+            existing.add(file.name);
+            state.imported += 1;
+            addLog("ok", `${file.name} → ${match.gloss} (${r.sample.frames.length} quadros).`);
+          } catch (err) {
+            state.failed += 1;
+            addLog("erro", `${file.name}: ${errorText(err)}`);
+          }
+        }
+        state.done += 1;
+        setVideoImport({ ...state });
+      }
+      state.running = false;
+      state.current = "";
+      setVideoImport({ ...state });
+      addLog("info", `Vídeos: ${state.imported} importados, ${state.skipped} pulados, ${state.failed} com erro.`);
+      setEvaluation(null);
+    },
+    [lia, videoImport?.running, addLog],
+  );
+
   /* ---------- avaliação ---------- */
 
   const runEvaluation = useCallback(async () => {
@@ -444,14 +513,15 @@ export function useVLibrasTraining(iframeRef: RefObject<HTMLIFrameElement | null
         new Set(vl.map((s) => s.signer)).size >= 2
           ? await evaluate(vl, { ...base, mode: "por-pessoa", trainSources: ["vlibras"] })
           : null;
-      // Pessoas de verdade: só os sinais que o VLibras também tem, para a comparação ser justa.
-      const mix = all.filter((s) => vlGlosses.has(s.gloss) && (s.source === "vlibras" || s.source === "proprio"));
-      const hasOwn = mix.some((s) => s.source === "proprio");
+      // Pessoas de verdade (gravações próprias e vídeos importados, como a V-LIBRASIL):
+      // só os sinais que o VLibras também tem, para a comparação ser justa.
+      const mix = all.filter((s) => vlGlosses.has(s.gloss) && (s.source === "vlibras" || PEOPLE_SOURCES.includes(s.source)));
+      const hasOwn = mix.some((s) => PEOPLE_SOURCES.includes(s.source));
       const real = hasOwn
         ? {
             vlibras: await evaluate(mix, { ...base, mode: "proprias", trainSources: ["vlibras"], exclude: "pessoa" }),
-            proprias: await evaluate(mix, { ...base, mode: "proprias", trainSources: ["proprio"], exclude: "pessoa" }),
-            ambos: await evaluate(mix, { ...base, mode: "proprias", trainSources: ["vlibras", "proprio"], exclude: "pessoa" }),
+            proprias: await evaluate(mix, { ...base, mode: "proprias", trainSources: PEOPLE_SOURCES, exclude: "pessoa" }),
+            ambos: await evaluate(mix, { ...base, mode: "proprias", trainSources: ["vlibras", ...PEOPLE_SOURCES], exclude: "pessoa" }),
           }
         : null;
       setEvaluation({ consistency, real, glosses: vlGlosses.size });
@@ -496,5 +566,7 @@ export function useVLibrasTraining(iframeRef: RefObject<HTMLIFrameElement | null
     evaluating,
     evaluation,
     runEvaluation,
+    videoImport,
+    importVideos,
   };
 }

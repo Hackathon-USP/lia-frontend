@@ -11,8 +11,8 @@ import { SEQUENCE_DIM, SEQUENCE_LENGTH } from './sequence';
  * - 'por-pessoa': validação cruzada deixando uma pessoa de fora por vez. Cada amostra é classificada
  *   com um modelo sem nenhuma amostra da pessoa que a gravou. Mede o que importa no totem: funcionar
  *   com quem o sistema nunca viu.
- * - 'proprias': treina com todas as fontes escolhidas e testa só com as gravações próprias (feitas com
- *   a webcam do totem). Por padrão tira do treino todas as amostras da pessoa testada (exclude 'pessoa');
+ * - 'proprias': treina com todas as fontes escolhidas e testa só com pessoas reais (gravações feitas
+ *   com a webcam do totem e vídeos importados, como os da V-LIBRASIL), nunca com o avatar. Por padrão tira do treino todas as amostras da pessoa testada (exclude 'pessoa');
  *   com 'amostra', tira só a própria amostra, o que dá um número otimista.
  *
  * O modelo é carregado uma vez; cada teste só pede ao classificador para ignorar os exemplos certos.
@@ -229,13 +229,16 @@ export async function evaluate(samples: readonly Sample[], options: EvaluationOp
     options.mirror,
   );
   const tests: Template[] =
-    mode === 'por-pessoa' ? train.templates.filter((t) => !t.mirrored) : build(samples.filter((s) => s.source === 'proprio')).templates;
+    mode === 'por-pessoa'
+      ? train.templates.filter((t) => !t.mirrored)
+      : // Pessoas reais: gravações próprias e vídeos importados (V-LIBRASIL, MINDS); nunca o avatar.
+        build(samples.filter((s) => s.source !== 'vlibras')).templates;
   const skipped = train.skipped.filter((s) => s.reason !== 'fora do vocabulário');
 
   if (mode === 'por-pessoa' && new Set(tests.map((t) => t.signer)).size < 2) {
     warnings.push('Só há amostras de uma pessoa: sem outra pessoa para comparar, a validação por pessoa não mede nada. Grave com mais gente.');
   }
-  if (mode === 'proprias' && !tests.length) warnings.push('Não há gravações próprias para testar.');
+  if (mode === 'proprias' && !tests.length) warnings.push('Não há gravações ou vídeos de pessoas reais para testar.');
   if (!train.templates.length) warnings.push('Não há exemplos para treinar com as fontes escolhidas.');
 
   const classifier = new DtwClassifier({ useWorker: options.useWorker });

@@ -116,6 +116,7 @@ export {
 export { computeFeatures, FrameNormalizer, measureReference, type NormalizerOptions } from './normalize';
 export { packRawFrame, unpackRawFrame, RAW_FLAGS, RAW_FORMAT, RAW_FRAME_SIZE, RAW_LAYOUT } from './raw-frame';
 export { glossesOf, normalizeGloss, parseVocabulary, type VocabularyEntry } from './vocabulary';
+export { glossFromVideoName, videoNameKey, type VideoNameMatch } from './video-names';
 export {
   DEFAULT_SEGMENTER_OPTIONS,
   pickMainSegment,
